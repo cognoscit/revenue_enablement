@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-theme="dark"> 
+<html lang="pt-BR" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -938,25 +938,41 @@ function save() {
 }
 
 async function load() {
+  // Flag: did this machine have real data before?
+  var hadLocalData = false;
   try {
     var raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      // Consider "real" if it has any days with deliverables, or a team with > default count
+      var hasRealDays = Object.values(parsed.days||{}).some(function(d){ return (d.deliverables||[]).length > 0; });
+      var hasRealTeam = (parsed.team||[]).length > 8; // default has 8 sample members
+      hadLocalData = hasRealDays || hasRealTeam;
+    }
     S = raw ? JSON.parse(raw) : defaultState();
     if (!S.version||S.version<3) S = defaultState();
     if (!S.pillars)   S.pillars   = defaultState().pillars;
     if (!S.templates) S.templates = [];
     if (!S.recurring) S.recurring = [];
-    loadSeedIfNeeded();
+    // Only load seed if no Gist token — otherwise Gist will provide real data
+    if (!ghTkGet()) loadSeedIfNeeded();
     migrateRecurring();
   } catch(e) { S = defaultState(); }
+
   if (!ghTkGet()) { setOdStatus("disconnected"); return; }
+
   setTimeout(async function() {
     setOdStatus("syncing");
     var remote = await pullFromOneDrive();
     if (remote) {
-      var remDays = Object.keys(remote.days||{}).length;
-      var locDays = Object.keys(S.days||{}).length;
-      if (remDays>=locDays) {
-        S=remote;
+      // On a fresh machine (no real local data) → ALWAYS use Gist
+      // On a machine with real data → use whichever has more content
+      var remDels = Object.values(remote.days||{}).reduce(function(n,d){ return n+(d.deliverables||[]).length; }, 0);
+      var locDels = Object.values(S.days||{}).reduce(function(n,d){ return n+(d.deliverables||[]).length; }, 0);
+      var remTeam = (remote.team||[]).length;
+      var shouldUseRemote = !hadLocalData || remDels >= locDels || remTeam > (S.team||[]).length;
+      if (shouldUseRemote) {
+        S = remote;
         if (!S.pillars)   S.pillars   = defaultState().pillars;
         if (!S.templates) S.templates = [];
         if (!S.recurring) S.recurring = [];
@@ -964,8 +980,17 @@ async function load() {
         try { localStorage.setItem(STORAGE_KEY,JSON.stringify(S)); } catch(e) {}
         applyTheme(); renderSidebar(); render();
         setOdStatus("synced","Do GitHub: "+new Date().toLocaleTimeString("pt-BR"));
-      } else { await pushToOneDrive(); }
-    } else { await pushToOneDrive(); }
+      } else {
+        // Local is more complete — push to Gist to sync it
+        await pushToOneDrive();
+      }
+    } else {
+      // Gist empty or unreachable — load seed as fallback, push local to Gist
+      loadSeedIfNeeded();
+      migrateRecurring();
+      applyTheme(); renderSidebar(); render();
+      await pushToOneDrive();
+    }
   }, 1200);
 }
 
