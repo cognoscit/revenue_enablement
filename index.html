@@ -682,6 +682,10 @@ body {
     <div class="nav-item" data-view="recurring">
       <span class="nav-icon">↻</span><span>Recorrentes</span>
     </div>
+    <div class="nav-item" data-view="holidays">
+      <span class="nav-icon">🏖</span><span>Folgas & Feriados</span>
+      <span class="nav-badge hidden" id="holidays-badge">0</span>
+    </div>
     <div class="nav-item" data-view="kpis">
       <span class="nav-icon">⚙️</span><span>Config. KPIs</span>
     </div>
@@ -1488,6 +1492,7 @@ function applyTemplates(dateStr) {
 // SIDEBAR
 // ═══════════════════════════════════════════════════
 function renderSidebar() {
+  updateHolidayBadge();
   const wrap=document.getElementById('sidebar-team'); if(!wrap) return;
   let html='<div class="sidebar-team-label">Membros do Time</div>';
   S.team.filter(m=>m.active).forEach(m=>{
@@ -1504,6 +1509,14 @@ function renderSidebar() {
   wrap.innerHTML=html;
 }
 function jumpMember(id){hf.member=id;setView('history');}
+
+function updateHolidayBadge() {
+  const b = document.getElementById('holidays-badge');
+  if (!b) return;
+  const upcoming = Object.keys(S.holidays||{}).filter(ds => ds >= today()).length;
+  if (upcoming > 0) { b.textContent = upcoming; b.classList.remove('hidden'); }
+  else { b.classList.add('hidden'); }
+}
 
 // ═══════════════════════════════════════════════════
 // CHARTS CLEANUP
@@ -3084,14 +3097,14 @@ function isMemberOnFolga(dateStr, memberId) {
 function setHoliday(dateStr, label, memberIds) {
   if (!S.holidays) S.holidays = {};
   S.holidays[dateStr] = { label: label||'Folga', memberIds: memberIds||[] };
-  save(); render();
+  save(); render(); updateHolidayBadge();
   toast('🏖 Folga definida: ' + fmtShort(dateStr), 'purple');
 }
 
 // Remove folga
 function removeHoliday(dateStr) {
   if (S.holidays) delete S.holidays[dateStr];
-  save(); render();
+  save(); render(); updateHolidayBadge();
   toast('✓ Folga removida: ' + fmtShort(dateStr), 'green');
 }
 
@@ -3140,6 +3153,8 @@ function saveFolgaModal(dateStr) {
   }
   setHoliday(dateStr, label, memberIds);
   closeModal();
+  if (view === 'holidays') renderHolidays();
+  updateHolidayBadge();
 }
 
 // ── DELIVERY TYPE UTILITIES ──
@@ -4133,8 +4148,109 @@ function quickAddForMember(id){openBatchAdd(date,id);}
 // ═══════════════════════════════════════════════════
 // MAIN RENDER
 // ═══════════════════════════════════════════════════
-const TITLES={ritual:'⚡ Ritual Matinal',executive:'🎯 Dashboard Executivo',weekly:'📅 Visão Semanal',metrics:'📊 KPIs & Métricas',team:'👥 Time & Pilares',history:'📋 Histórico',templates:'🔁 Templates',recurring:'↻ Recorrentes',kpis:'⚙️ Config. KPIs',settings:'🔧 Configurações'};
+const TITLES={ritual:'⚡ Ritual Matinal',holidays:'🏖 Folgas & Feriados',executive:'🎯 Dashboard Executivo',weekly:'📅 Visão Semanal',metrics:'📊 KPIs & Métricas',team:'👥 Time & Pilares',history:'📋 Histórico',templates:'🔁 Templates',recurring:'↻ Recorrentes',kpis:'⚙️ Config. KPIs',settings:'🔧 Configurações'};
 
+
+// ═══════════════════════════════════════════════════
+// RENDER: FOLGAS & FERIADOS
+// ═══════════════════════════════════════════════════
+function renderHolidays() {
+  destroyCharts();
+  const holidays = S.holidays || {};
+  const entries = Object.entries(holidays)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  const upcomingCount = entries.filter(([ds]) => ds >= today()).length;
+  const pastCount     = entries.filter(([ds]) => ds < today()).length;
+
+  let html = '<div class="sec-hd">'
+    + '<div class="sec-title">🏖 Folgas & Feriados</div>'
+    + '<div class="sec-actions">'
+    + '<button class="btn btn-p btn-sm" onclick="openFolgaModal(\''+today()+'\')">+ Nova Folga</button>'
+    + '</div></div>';
+
+  if (entries.length === 0) {
+    html += '<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Nenhuma folga ou feriado cadastrado</div></div>';
+    document.getElementById('content').innerHTML = html;
+    return;
+  }
+
+  // Summary chips
+  html += '<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">'
+    + '<div style="padding:8px 16px;border-radius:var(--radius);background:var(--bg-card);border:1px solid var(--border);font-size:13px"><strong style="color:var(--accent)">' + entries.length + '</strong> <span style="color:var(--text-muted)">registros no total</span></div>'
+    + '<div style="padding:8px 16px;border-radius:var(--radius);background:var(--bg-card);border:1px solid var(--border);font-size:13px"><strong style="color:#6366f1">' + upcomingCount + '</strong> <span style="color:var(--text-muted)">próximas / futuras</span></div>'
+    + '<div style="padding:8px 16px;border-radius:var(--radius);background:var(--bg-card);border:1px solid var(--border);font-size:13px"><strong style="color:var(--text-muted)">' + pastCount + '</strong> <span style="color:var(--text-muted)">passadas</span></div>'
+    + '</div>';
+
+  // Upcoming section
+  const upcoming = entries.filter(([ds]) => ds >= today());
+  const past     = entries.filter(([ds]) => ds < today()).reverse(); // newest first
+
+  function buildTable(list, title, isPast) {
+    if (!list.length) return '';
+    let t = '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;">'
+      + '<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">'
+      + '<span style="font-family:Barlow Condensed,sans-serif;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-secondary)">' + title + '</span>'
+      + '<span style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text-muted)">' + list.length + ' registros</span>'
+      + '</div>'
+      + '<table class="htable"><thead><tr>'
+      + '<th>Data</th><th>Descrição</th><th>Membros</th><th>Dia da semana</th><th style="width:90px">Ações</th>'
+      + '</tr></thead><tbody>';
+
+    list.forEach(function(entry) {
+      var ds = entry[0], h = entry[1];
+      var dx = new Date(ds + 'T12:00:00');
+      var dow = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dx.getDay()];
+      var isWeekend = dx.getDay() === 0 || dx.getDay() === 6;
+      var isPast2   = ds < today();
+      var scope;
+      if (!h.memberIds || h.memberIds.length === 0) {
+        scope = '<span style="font-size:11px;padding:2px 8px;border-radius:3px;background:rgba(99,102,241,.1);color:#6366f1;font-weight:600">Time todo</span>';
+      } else {
+        scope = h.memberIds.map(function(mid) {
+          var m = getMember(mid);
+          var pc = getPillarColor(m.pillarId);
+          return '<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + pc + '18;color:' + pc + ';margin-right:3px">' + m.name.split(' ')[0] + '</span>';
+        }).join('');
+      }
+      t += '<tr style="' + (isPast2 ? 'opacity:.55;' : '') + '">'
+        + '<td><strong style="font-family:JetBrains Mono,monospace;font-size:12px">' + ds + '</strong></td>'
+        + '<td>' + escHtml(h.label) + '</td>'
+        + '<td>' + scope + '</td>'
+        + '<td><span style="font-family:JetBrains Mono,monospace;font-size:11px;color:' + (isWeekend?'var(--text-muted)':'var(--text-primary)') + '">' + dow + '</span>'
+        + (isWeekend ? ' <span style="font-size:9px;color:var(--text-muted)">(fds)</span>' : '') + '</td>'
+        + '<td style="white-space:nowrap">'
+        + '<button class="btn btn-s btn-sm" style="padding:3px 8px;font-size:11px" onclick="openFolgaModal(\'' + ds + '\')">✏️</button>'
+        + ' <button class="btn btn-d btn-sm" style="padding:3px 8px;font-size:11px" onclick="confirmRemoveHoliday(\'' + ds + '\')">🗑</button>'
+        + '</td>'
+        + '</tr>';
+    });
+
+    t += '</tbody></table></div>';
+    return t;
+  }
+
+  html += buildTable(upcoming, '📅 Próximas & Futuras', false);
+  html += buildTable(past, '📁 Histórico', true);
+
+  document.getElementById('content').innerHTML = html;
+}
+
+function confirmRemoveHoliday(dateStr) {
+  const h = getHoliday(dateStr);
+  if (!h) return;
+  const footHtml = '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    + '<button class="btn btn-d" onclick="removeHoliday(\'' + dateStr + '\');setView(\'holidays\');closeModal()">Confirmar</button>';
+  openModal({
+    title: '🗑 Remover Folga',
+    body: '<div style="text-align:center;padding:20px">'
+      + '<div style="font-size:32px;margin-bottom:10px">🏖</div>'
+      + '<div style="font-weight:600;margin-bottom:6px">' + escHtml(h.label) + '</div>'
+      + '<div style="color:var(--text-muted);font-size:13px">' + dateStr + ' · Esta ação não pode ser desfeita.</div>'
+      + '</div>',
+    foot: footHtml
+  });
+}
 function setView(v){
   view=v;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.view===v));
@@ -4157,6 +4273,7 @@ function render(){
     case 'history':  renderHistory(); break;
     case 'templates':renderTemplates(); break;
     case 'recurring':renderRecurring(); break;
+    case 'holidays':  renderHolidays(); break;
     case 'kpis':     renderKPIs(); break;
     case 'settings': renderSettings(); break;
   }
