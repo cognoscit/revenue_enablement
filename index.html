@@ -3096,19 +3096,21 @@ function isMemberOnFolga(dateStr, memberId) {
 // Set or update folga for a date
 function setHoliday(dateStr, label, memberIds) {
   if (!S.holidays) S.holidays = {};
-  S.holidays[dateStr] = { label: label||'Folga', memberIds: memberIds||[] };
+  S.holidays[dateStr] = { label: label||'Folga', memberIds: memberIds||[], category: 'folga' };
   save(); render(); updateHolidayBadge();
 }
 
 // Set holiday for a date range (inclusive, dias úteis only if requested)
-function setHolidayRange(startDate, endDate, label, memberIds, workdaysOnly) {
+function setHolidayRange(startDate, endDate, label, memberIds, workdaysOnly, cat) {
+  var groupId = startDate !== endDate ? (startDate+'_'+endDate) : null;
+  cat = cat || (startDate !== endDate ? 'ferias' : 'folga');
   if (!S.holidays) S.holidays = {};
   let cur = startDate;
   let count = 0;
   while (cur <= endDate) {
     const dow = new Date(cur + 'T12:00:00').getDay();
     if (!workdaysOnly || (dow >= 1 && dow <= 5)) {
-      S.holidays[cur] = { label: label||'Férias', memberIds: memberIds||[] };
+      S.holidays[cur] = { label: label||'Férias', memberIds: memberIds||[], category: cat, groupId: groupId };
       count++;
     }
     cur = nextDay(cur);
@@ -3159,14 +3161,24 @@ function openFolgaModal(dateStr) {
       + '</label>';
   });
 
+  const existCat = existing ? (existing.category || 'folga') : 'folga';
   const body = '<div class="frow" style="gap:10px;margin-bottom:10px">'
     + '<div class="fg"><label class="flbl">Data início *</label>'
-    + '<input class="fi" id="folga-start" type="date" value="' + dateStr + '"></div>'
+    + '<input class="fi" id="folga-start" type="date" value="' + dateStr + '" oninput="updateFolgaPreview()"></div>'
     + '<div class="fg"><label class="flbl">Data fim</label>'
     + '<input class="fi" id="folga-end" type="date" value="' + dateStr + '" oninput="updateFolgaPreview()"></div>'
     + '</div>'
-    + '<div class="fg" style="margin-bottom:10px"><label class="flbl">Descrição</label>'
-    + '<input class="fi" id="folga-label" placeholder="ex: Feriado Nacional, Férias, Recesso..." value="' + escHtml(existing ? existing.label : 'Feriado') + '"></div>'
+    + '<div class="frow" style="gap:10px;margin-bottom:10px">'
+    + '<div class="fg"><label class="flbl">Categoria</label>'
+    + '<select class="fsel" id="folga-cat" onchange="updateFolgaPreview()">'
+    + '<option value="feriado" ' + (existCat==='feriado'?'selected':'') + '>📅 Feriado</option>'
+    + '<option value="folga"   ' + (existCat==='folga'  ?'selected':'') + '>🏖 Folga Pontual</option>'
+    + '<option value="ferias"  ' + (existCat==='ferias' ?'selected':'') + '>🌴 Férias</option>'
+    + '<option value="recesso" ' + (existCat==='recesso'?'selected':'') + '>🔔 Recesso</option>'
+    + '</select></div>'
+    + '<div class="fg"><label class="flbl">Descrição</label>'
+    + '<input class="fi" id="folga-label" placeholder="ex: Feriado Nacional, Férias..." value="' + escHtml(existing ? existing.label : 'Feriado') + '"></div>'
+    + '</div>'
     + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
     + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">'
     + '<input type="checkbox" id="folga-workdays-only" checked style="width:14px;height:14px;accent-color:#6366f1" oninput="updateFolgaPreview()">'
@@ -3236,13 +3248,16 @@ function saveFolgaModal(dateStr) {
     document.querySelectorAll('.folga-mbr-chk:checked').forEach(function(c){ memberIds.push(c.value); });
   }
 
+  const catEl = document.getElementById('folga-cat');
+  const cat   = catEl ? catEl.value : (startDate !== endDate ? 'ferias' : 'folga');
+
   if (startDate === endDate) {
-    // Single day
-    setHoliday(startDate, label, memberIds);
-    toast('🏖 Folga definida: ' + fmtShort(startDate), 'purple');
+    if (!S.holidays) S.holidays = {};
+    S.holidays[startDate] = { label: label, memberIds: memberIds, category: cat };
+    save(); render(); updateHolidayBadge();
+    toast('🏖 ' + (cat==='ferias'?'Férias':'Folga') + ' definida: ' + fmtShort(startDate), 'purple');
   } else {
-    // Range
-    setHolidayRange(startDate, endDate, label, memberIds, workdaysOnly);
+    setHolidayRange(startDate, endDate, label, memberIds, workdaysOnly, cat);
   }
   closeModal();
   if (view === 'holidays') renderHolidays();
@@ -4246,19 +4261,102 @@ const TITLES={ritual:'⚡ Ritual Matinal',holidays:'🏖 Folgas & Feriados',exec
 // ═══════════════════════════════════════════════════
 // RENDER: FOLGAS & FERIADOS
 // ═══════════════════════════════════════════════════
+
+function toggleGroupChk(masterChk, title) {
+  document.querySelectorAll('.grp-chk').forEach(c => { c.checked = masterChk.checked; });
+}
+
+function confirmDeleteGroup(days, label) {
+  const n = days.length;
+  const foot = '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    + '<button class="btn btn-d" onclick="deleteGroupDays(' + JSON.stringify(days) + ');closeModal()">🗑 Remover</button>';
+  openModal({
+    title: '🗑 Remover ' + (n>1 ? n + ' dias' : 'folga'),
+    body: '<div style="text-align:center;padding:20px">'
+      + '<div style="font-size:32px;margin-bottom:10px">🏖</div>'
+      + '<div style="font-weight:600;margin-bottom:6px">' + escHtml(label) + '</div>'
+      + '<div style="color:var(--text-muted);font-size:13px">' + (n>1 ? n + ' dias serão removidos.' : days[0]) + ' Esta ação não pode ser desfeita.</div>'
+      + '</div>',
+    foot: foot
+  });
+}
+
+function deleteGroupDays(days) {
+  if (!S.holidays) return;
+  days.forEach(ds => { delete S.holidays[ds]; });
+  save(); render(); updateHolidayBadge();
+  toast('🗑 ' + days.length + ' dia(s) removidos', 'yellow');
+}
+
+function bulkDeleteHolidays() {
+  const checked = document.querySelectorAll('.grp-chk:checked');
+  if (!checked.length) { toast('Selecione ao menos um evento para excluir', 'yellow'); return; }
+
+  // Collect all days from checked groups
+  const allDays = [];
+  checked.forEach(chk => {
+    const days = chk.dataset.days ? chk.dataset.days.split(',') : [];
+    days.forEach(d => { if (!allDays.includes(d)) allDays.push(d); });
+  });
+
+  const foot = '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    + '<button class="btn btn-d" onclick="deleteGroupDays(' + JSON.stringify(allDays) + ');closeModal()">🗑 Remover ' + allDays.length + ' dia(s)</button>';
+  openModal({
+    title: '🗑 Excluir em Massa',
+    body: '<div style="text-align:center;padding:20px">'
+      + '<div style="font-size:32px;margin-bottom:10px">🗑</div>'
+      + '<div style="font-weight:600;margin-bottom:6px">' + checked.length + ' evento(s) selecionado(s)</div>'
+      + '<div style="color:var(--text-muted);font-size:13px">' + allDays.length + ' dias no total serão removidos. Esta ação não pode ser desfeita.</div>'
+      + '</div>',
+    foot: foot
+  });
+}
 function renderHolidays() {
   destroyCharts();
   const holidays = S.holidays || {};
-  const entries = Object.entries(holidays)
-    .sort((a, b) => a[0].localeCompare(b[0]));
+  const entries  = Object.entries(holidays).sort((a,b)=>a[0].localeCompare(b[0]));
+  const todayStr = today();
 
-  const upcomingCount = entries.filter(([ds]) => ds >= today()).length;
-  const pastCount     = entries.filter(([ds]) => ds < today()).length;
+  // Category metadata
+  const CAT_META = {
+    feriado: { label:'Feriado',      icon:'📅', color:'#06b6d4' },
+    folga:   { label:'Folga Pontual',icon:'🏖',  color:'#6366f1' },
+    ferias:  { label:'Férias',       icon:'🌴',  color:'#10b981' },
+    recesso: { label:'Recesso',      icon:'🔔',  color:'#f59e0b' },
+  };
+
+  // Detect groups (consecutive days with same label+groupId)
+  function detectGroups(list) {
+    const groups = {};
+    list.forEach(([ds, h]) => {
+      const key = h.groupId || (h.label + '|' + (h.memberIds||[]).join(','));
+      if (!groups[key]) groups[key] = { key, label: h.label, category: h.category||'folga', memberIds: h.memberIds||[], days: [] };
+      groups[key].days.push(ds);
+    });
+    return Object.values(groups).map(g => {
+      g.days.sort();
+      g.start = g.days[0]; g.end = g.days[g.days.length-1];
+      return g;
+    }).sort((a,b) => a.start.localeCompare(b.start));
+  }
+
+  const upcoming = entries.filter(([ds]) => ds >= todayStr);
+  const past     = entries.filter(([ds]) => ds < todayStr).reverse();
+  const upGroups = detectGroups(upcoming);
+  const paGroups = detectGroups(past);
+
+  // Count by category
+  const catCounts = {};
+  entries.forEach(([,h]) => {
+    const c = h.category || 'folga';
+    catCounts[c] = (catCounts[c]||0)+1;
+  });
 
   let html = '<div class="sec-hd">'
     + '<div class="sec-title">🏖 Folgas & Feriados</div>'
-    + '<div class="sec-actions">'
-    + '<button class="btn btn-p btn-sm" onclick="openFolgaModal(\''+today()+'\')">+ Nova Folga</button>'
+    + '<div class="sec-actions" style="gap:8px">'
+    + '<button class="btn btn-s btn-sm" onclick="bulkDeleteHolidays()">🗑 Excluir em massa</button>'
+    + '<button class="btn btn-p btn-sm" onclick="openFolgaModal(\''+todayStr+'\')">' + '+ Nova</button>'
     + '</div></div>';
 
   if (entries.length === 0) {
@@ -4267,53 +4365,53 @@ function renderHolidays() {
     return;
   }
 
-  // Summary chips
-  html += '<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">'
-    + '<div style="padding:8px 16px;border-radius:var(--radius);background:var(--bg-card);border:1px solid var(--border);font-size:13px"><strong style="color:var(--accent)">' + entries.length + '</strong> <span style="color:var(--text-muted)">registros no total</span></div>'
-    + '<div style="padding:8px 16px;border-radius:var(--radius);background:var(--bg-card);border:1px solid var(--border);font-size:13px"><strong style="color:#6366f1">' + upcomingCount + '</strong> <span style="color:var(--text-muted)">próximas / futuras</span></div>'
-    + '<div style="padding:8px 16px;border-radius:var(--radius);background:var(--bg-card);border:1px solid var(--border);font-size:13px"><strong style="color:var(--text-muted)">' + pastCount + '</strong> <span style="color:var(--text-muted)">passadas</span></div>'
-    + '</div>';
+  // Summary by category
+  html += '<div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;">';
+  html += '<div style="padding:7px 14px;border-radius:var(--radius);background:var(--bg-card);border:1px solid var(--border);font-size:12px"><strong style="color:var(--accent)">' + entries.length + '</strong> <span style="color:var(--text-muted)">total</span></div>';
+  Object.entries(catCounts).forEach(([c,n]) => {
+    const m = CAT_META[c] || { label:c, icon:'📅', color:'#6b7280' };
+    html += '<div style="padding:7px 14px;border-radius:var(--radius);background:' + m.color + '10;border:1px solid ' + m.color + '30;font-size:12px">'
+      + m.icon + ' <strong style="color:' + m.color + '">' + n + '</strong> <span style="color:var(--text-muted)">' + m.label + (n>1?'s':'') + '</span></div>';
+  });
+  html += '</div>';
 
-  // Upcoming section
-  const upcoming = entries.filter(([ds]) => ds >= today());
-  const past     = entries.filter(([ds]) => ds < today()).reverse(); // newest first
-
-  function buildTable(list, title, isPast) {
-    if (!list.length) return '';
+  function buildGroupTable(groups, title) {
+    if (!groups.length) return '';
     let t = '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;">'
       + '<div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">'
       + '<span style="font-family:Barlow Condensed,sans-serif;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-secondary)">' + title + '</span>'
-      + '<span style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text-muted)">' + list.length + ' registros</span>'
+      + '<span style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--text-muted)">' + groups.length + ' evento(s)</span>'
       + '</div>'
       + '<table class="htable"><thead><tr>'
-      + '<th>Data</th><th>Descrição</th><th>Membros</th><th>Dia da semana</th><th style="width:90px">Ações</th>'
+      + '<th style="width:32px"><input type="checkbox" id="chk-all-' + title.replace(/\W/g,'') + '" onchange="toggleGroupChk(this,\'' + title + '\')" style="accent-color:#6366f1"></th>'
+      + '<th>Categoria</th><th>Período</th><th>Descrição</th><th>Membros</th><th>Dias</th><th style="width:80px">Ações</th>'
       + '</tr></thead><tbody>';
 
-    list.forEach(function(entry) {
-      var ds = entry[0], h = entry[1];
-      var dx = new Date(ds + 'T12:00:00');
-      var dow = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dx.getDay()];
-      var isWeekend = dx.getDay() === 0 || dx.getDay() === 6;
-      var isPast2   = ds < today();
-      var scope;
-      if (!h.memberIds || h.memberIds.length === 0) {
-        scope = '<span style="font-size:11px;padding:2px 8px;border-radius:3px;background:rgba(99,102,241,.1);color:#6366f1;font-weight:600">Time todo</span>';
-      } else {
-        scope = h.memberIds.map(function(mid) {
-          var m = getMember(mid);
-          var pc = getPillarColor(m.pillarId);
-          return '<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:' + pc + '18;color:' + pc + ';margin-right:3px">' + m.name.split(' ')[0] + '</span>';
-        }).join('');
-      }
-      t += '<tr style="' + (isPast2 ? 'opacity:.55;' : '') + '">'
-        + '<td><strong style="font-family:JetBrains Mono,monospace;font-size:12px">' + ds + '</strong></td>'
-        + '<td>' + escHtml(h.label) + '</td>'
+    groups.forEach(function(g) {
+      const isPast = g.end < todayStr;
+      const cm     = CAT_META[g.category] || CAT_META.folga;
+      const isSingle = g.days.length === 1;
+      const periodStr = isSingle
+        ? g.start
+        : g.start + ' → ' + g.end;
+      const scope = (!g.memberIds || !g.memberIds.length)
+        ? '<span style="font-size:11px;padding:2px 8px;border-radius:3px;background:rgba(99,102,241,.1);color:#6366f1;font-weight:600">Time todo</span>'
+        : g.memberIds.slice(0,3).map(mid => {
+            const m = getMember(mid);
+            const pc = getPillarColor(m.pillarId);
+            return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:' + pc + '18;color:' + pc + '">' + m.name.split(' ')[0] + '</span>';
+          }).join(' ') + (g.memberIds.length>3 ? ' <span style="font-size:10px;color:var(--text-muted)">+' + (g.memberIds.length-3) + '</span>' : '');
+
+      t += '<tr style="' + (isPast?'opacity:.5;':'') + '">'
+        + '<td><input type="checkbox" class="grp-chk" data-group="' + escHtml(g.key) + '" data-days="' + escHtml(g.days.join(',')) + '" style="accent-color:#6366f1"></td>'
+        + '<td><span style="font-size:11px;padding:2px 8px;border-radius:3px;background:' + cm.color + '15;color:' + cm.color + ';font-weight:600">' + cm.icon + ' ' + cm.label + '</span></td>'
+        + '<td style="font-family:JetBrains Mono,monospace;font-size:11px;white-space:nowrap">' + periodStr + '</td>'
+        + '<td>' + escHtml(g.label) + '</td>'
         + '<td>' + scope + '</td>'
-        + '<td><span style="font-family:JetBrains Mono,monospace;font-size:11px;color:' + (isWeekend?'var(--text-muted)':'var(--text-primary)') + '">' + dow + '</span>'
-        + (isWeekend ? ' <span style="font-size:9px;color:var(--text-muted)">(fds)</span>' : '') + '</td>'
+        + '<td><span style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text-muted)">' + g.days.length + 'd</span></td>'
         + '<td style="white-space:nowrap">'
-        + '<button class="btn btn-s btn-sm" style="padding:3px 8px;font-size:11px" onclick="openFolgaModal(\'' + ds + '\')">✏️</button>'
-        + ' <button class="btn btn-d btn-sm" style="padding:3px 8px;font-size:11px" onclick="confirmRemoveHoliday(\'' + ds + '\')">🗑</button>'
+        + (isSingle ? '<button class="btn btn-s btn-sm" style="padding:3px 7px;font-size:11px" onclick="openFolgaModal(\'' + g.start + '\')">✏️</button> ' : '')
+        + '<button class="btn btn-d btn-sm" style="padding:3px 7px;font-size:11px" onclick="confirmDeleteGroup(' + JSON.stringify(g.days) + ',\'' + escHtml(g.label) + '\')">🗑</button>'
         + '</td>'
         + '</tr>';
     });
@@ -4322,12 +4420,11 @@ function renderHolidays() {
     return t;
   }
 
-  html += buildTable(upcoming, '📅 Próximas & Futuras', false);
-  html += buildTable(past, '📁 Histórico', true);
+  html += buildGroupTable(upGroups, '📅 Próximas & Futuras');
+  html += buildGroupTable(paGroups, '📁 Histórico');
 
   document.getElementById('content').innerHTML = html;
 }
-
 function confirmRemoveHoliday(dateStr) {
   const h = getHoliday(dateStr);
   if (!h) return;
