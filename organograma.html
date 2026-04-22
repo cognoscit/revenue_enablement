@@ -20,12 +20,14 @@
     --gray-600: #5a5955;
     --gray-800: #2a2928;
     --white: #ffffff;
+
     --pillar-1: #0077B6;
     --pillar-2: #7B2D8B;
     --pillar-3: #C9770D;
     --pillar-4: #0A7D5A;
     --pillar-5: #C05020;
     --pillar-6: #3A3AC8;
+
     --connector: #c8c7c3;
     --card-radius: 6px;
   }
@@ -38,15 +40,39 @@
     padding: 40px 24px 60px;
   }
 
-  header { text-align: center; margin-bottom: 44px; }
-  .org-title {
-    font-size: 11px; font-weight: 500; letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--gray-400); margin-bottom: 6px;
+  header {
+    text-align: center;
+    margin-bottom: 44px;
   }
-  .org-name { font-size: 22px; font-weight: 600; color: var(--navy); letter-spacing: -0.02em; }
-  .org-meta { font-size: 11px; color: var(--gray-400); margin-top: 4px; font-family: 'IBM Plex Mono', monospace; }
 
-  .tree { display: flex; flex-direction: column; align-items: center; }
+  .org-title {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gray-400);
+    margin-bottom: 6px;
+  }
+
+  .org-name {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--navy);
+    letter-spacing: -0.02em;
+  }
+
+  .org-meta {
+    font-size: 11px;
+    color: var(--gray-400);
+    margin-top: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .tree {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
 
   .card {
     background: var(--white);
@@ -55,24 +81,97 @@
     padding: 11px 18px;
     text-align: center;
   }
+
   .card .badge {
-    font-size: 9px; font-weight: 500; letter-spacing: 0.1em;
-    text-transform: uppercase; color: var(--gray-400); margin-bottom: 3px;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gray-400);
+    margin-bottom: 3px;
     font-family: 'IBM Plex Mono', monospace;
   }
-  .card .name { font-size: 13px; font-weight: 600; color: var(--gray-800); line-height: 1.3; }
-  .card .sub  { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
 
-  .card-thales     { width: 220px; border-top: 3px solid var(--navy-mid); }
-  .card-supervisor { width: 260px; border-top: 3px solid var(--green); background: #fafffe; }
-  .card-supervisor .name { color: var(--navy); font-size: 14px; }
+  .card .name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-800);
+    line-height: 1.3;
+  }
 
-  .vline { width: 1px; background: var(--connector); margin: 0 auto; }
+  .card .sub {
+    font-size: 11px;
+    color: var(--gray-400);
+    margin-top: 2px;
+  }
 
-  .pillars {
+  .card-thales {
+    width: 220px;
+    border-top: 3px solid var(--navy-mid);
+  }
+
+  .card-supervisor {
+    width: 260px;
+    border-top: 3px solid var(--green);
+    background: #fafffe;
+  }
+
+  .card-supervisor .name {
+    color: var(--navy);
+    font-size: 14px;
+  }
+
+  .vline {
+    width: 1px;
+    background: var(--connector);
+    margin: 0 auto;
+  }
+
+  #topConnectorSVG,
+  #leaderConnectorSVG {
+    display: block;
+    overflow: visible;
+    width: 100%;
+  }
+
+  .leaders-row {
+    width: 100%;
+    max-width: 1320px;
     display: flex;
-    gap: 14px;
+    justify-content: center;
     align-items: flex-start;
+    gap: 18px;
+    flex-wrap: nowrap;
+  }
+
+  .leader-cluster {
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .leader-card {
+    width: 240px;
+    border-top: 3px solid var(--gray-600);
+    background: #f6f7f9;
+  }
+
+  .leader-card .name {
+    color: var(--navy);
+    font-size: 13px;
+  }
+
+  .cluster-pillars {
+    margin-top: 22px;
+    width: 100%;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .cluster-pillars.single {
     justify-content: center;
   }
 
@@ -80,42 +179,34 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 178px;
+    width: 144px;
+  }
+
+  .pillar-col.double {
+    width: 144px;
   }
 
   .pillar-header {
     width: 100%;
     border-radius: var(--card-radius) var(--card-radius) 0 0;
-    padding: 9px 12px;
+    padding: 9px 10px;
     text-align: center;
     color: var(--white);
   }
-  .pillar-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; line-height: 1.3; }
-  .pillar-count { font-size: 9px; opacity: 0.7; margin-top: 2px; font-family: 'IBM Plex Mono', monospace; }
 
-  .lead-row {
-    width: 100%;
-    border-left: 1px solid var(--gray-200);
-    border-right: 1px solid var(--gray-200);
-    background: #f7f7fb;
-    padding: 8px 12px 8px 14px;
-    position: relative;
-    border-bottom: 1px dashed var(--gray-300);
+  .pillar-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    line-height: 1.3;
   }
-  .lead-row::before {
-    content: 'LÍDER TÉCNICO';
-    display: block;
-    font-size: 8px; font-weight: 600; letter-spacing: 0.1em;
-    color: var(--gray-400); font-family: 'IBM Plex Mono', monospace; margin-bottom: 3px;
+
+  .pillar-count {
+    font-size: 9px;
+    opacity: 0.75;
+    margin-top: 2px;
+    font-family: 'IBM Plex Mono', monospace;
   }
-  .lead-row::after {
-    content: '';
-    position: absolute;
-    left: 0; top: 0; bottom: 0; width: 3px;
-  }
-  .lead-name { font-size: 11.5px; font-weight: 600; color: var(--gray-800); line-height: 1.3; }
-  .lead-role { font-size: 9.5px; color: var(--gray-400); font-family: 'IBM Plex Mono', monospace; }
-  .lead-scope { font-size: 8.5px; color: var(--gray-400); margin-top: 3px; font-style: italic; line-height: 1.4; }
 
   .pillar-members {
     width: 100%;
@@ -125,37 +216,57 @@
     background: var(--white);
     overflow: hidden;
   }
+
   .member-row {
-    padding: 8px 12px 8px 14px;
+    padding: 8px 10px 8px 12px;
     border-bottom: 1px solid var(--gray-200);
     position: relative;
+    min-height: 52px;
   }
+
   .member-row:last-child { border-bottom: none; }
+
   .member-row::before {
     content: '';
     position: absolute;
-    left: 0; top: 0; bottom: 0; width: 3px;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
   }
-  .member-name { font-size: 11.5px; font-weight: 500; color: var(--gray-800); line-height: 1.3; }
-  .member-role { font-size: 9.5px; color: var(--gray-400); margin-top: 1px; font-family: 'IBM Plex Mono', monospace; }
+
+  .member-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--gray-800);
+    line-height: 1.3;
+  }
+
+  .member-role {
+    font-size: 9px;
+    color: var(--gray-400);
+    margin-top: 2px;
+    font-family: 'IBM Plex Mono', monospace;
+    line-height: 1.35;
+  }
 
   .p1 .pillar-header { background: var(--pillar-1); }
-  .p1 .lead-row::after, .p1 .member-row::before { background: var(--pillar-1); }
+  .p1 .member-row::before { background: var(--pillar-1); }
 
   .p2 .pillar-header { background: var(--pillar-2); }
-  .p2 .lead-row::after, .p2 .member-row::before { background: var(--pillar-2); }
+  .p2 .member-row::before { background: var(--pillar-2); }
 
   .p3 .pillar-header { background: var(--pillar-3); }
-  .p3 .lead-row::after, .p3 .member-row::before { background: var(--pillar-3); }
+  .p3 .member-row::before { background: var(--pillar-3); }
 
   .p4 .pillar-header { background: var(--pillar-4); }
-  .p4 .lead-row::after, .p4 .member-row::before { background: var(--pillar-4); }
+  .p4 .member-row::before { background: var(--pillar-4); }
 
   .p5 .pillar-header { background: var(--pillar-5); }
-  .p5 .lead-row::after, .p5 .member-row::before { background: var(--pillar-5); }
+  .p5 .member-row::before { background: var(--pillar-5); }
 
   .p6 .pillar-header { background: var(--pillar-6); }
-  .p6 .lead-row::after, .p6 .member-row::before { background: var(--pillar-6); }
+  .p6 .member-row::before { background: var(--pillar-6); }
 
   .legend {
     margin-top: 32px;
@@ -165,7 +276,14 @@
     gap: 24px;
     flex-wrap: wrap;
   }
-  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--gray-400); }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 10px;
+    color: var(--gray-400);
+  }
 
   footer {
     margin-top: 20px;
@@ -175,7 +293,19 @@
     font-family: 'IBM Plex Mono', monospace;
     letter-spacing: 0.04em;
   }
+
   footer span { margin: 0 10px; }
+
+  @media (max-width: 1280px) {
+    .leaders-row {
+      flex-wrap: wrap;
+      gap: 26px;
+    }
+
+    .leader-cluster {
+      width: 340px;
+    }
+  }
 
   @media print {
     body { background: white; padding: 16px; }
@@ -186,170 +316,192 @@
 <body>
 
 <header>
-  <p class="org-title">ADM GBS South America &nbsp;·&nbsp; Prospect-to-Cash</p>
+  <p class="org-title">ADM GBS South America · Prospect-to-Cash</p>
   <h1 class="org-name">Revenue Enablement</h1>
-  <p class="org-meta">18 colaboradores &nbsp;·&nbsp; 4 líderes técnicos &nbsp;·&nbsp; 6 pilares &nbsp;·&nbsp; Ribeirão Preto, SP</p>
+  <p class="org-meta">18 colaboradores · 4 líderes técnicos · 6 pilares · Ribeirão Preto, SP</p>
 </header>
 
 <div class="tree">
 
-  <div><div class="card card-thales">
-    <div class="badge">T2C Tower Manager</div>
-    <div class="name">Thales</div>
-  </div></div>
+  <div>
+    <div class="card card-thales" id="thalesCard">
+      <div class="badge">T2C Tower Manager</div>
+      <div class="name">Thales</div>
+    </div>
+  </div>
 
   <div class="vline" style="height:22px"></div>
 
-  <div><div class="card card-supervisor">
-    <div class="badge">Supervisor</div>
-    <div class="name">Matheus Andreazzi</div>
-    <div class="sub">Revenue Enablement</div>
-  </div></div>
+  <div>
+    <div class="card card-supervisor" id="supervisorCard">
+      <div class="badge">Supervisor</div>
+      <div class="name">Matheus Andreazzi</div>
+      <div class="sub">Revenue Enablement</div>
+    </div>
+  </div>
 
-  <svg id="connectorSVG" style="display:block;overflow:visible;"></svg>
+  <svg id="topConnectorSVG"></svg>
 
-  <div class="pillars" id="pillarsContainer">
+  <div class="leaders-row" id="leadersRow">
 
-    <!-- 1. Order Release -->
-    <div class="pillar-col p1">
-      <div class="pillar-header">
-        <div class="pillar-label">Order Release</div>
-        <div class="pillar-count">3 membros</div>
+    <!-- SIMEIA -->
+    <div class="leader-cluster">
+      <div class="card leader-card">
+        <div class="badge">Líder Técnico</div>
+        <div class="name">Simeia Cristina Barbosa Giatti</div>
+        <div class="sub">Analista Pleno</div>
       </div>
-      <div class="lead-row">
-        <div class="lead-name">Simeia Cristina Barbosa Giatti</div>
-        <div class="lead-role">Credit Collection Analyst</div>
-      </div>
-      <div class="pillar-members">
-        <div class="member-row">
-          <div class="member-name">Paola Assis</div>
-          <div class="member-role">Administrative Analyst</div>
-        </div>
-        <div class="member-row">
-          <div class="member-name">Renata Biliato (temp)</div>
-          <div class="member-role">Administrative Assistant</div>
+
+      <svg class="cluster-svg" style="display:block;overflow:visible;width:100%;height:22px;"></svg>
+
+      <div class="cluster-pillars single">
+        <div class="pillar-col p1">
+          <div class="pillar-header">
+            <div class="pillar-label">Order Release</div>
+            <div class="pillar-count">2 membros</div>
+          </div>
+          <div class="pillar-members">
+            <div class="member-row">
+              <div class="member-name">Paola Assis</div>
+              <div class="member-role">Analista Pleno</div>
+            </div>
+            <div class="member-row">
+              <div class="member-name">Renata Biliato (temp)</div>
+              <div class="member-role">Assistente</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 2. Sales Order -->
-    <div class="pillar-col p2">
-      <div class="pillar-header">
-        <div class="pillar-label">Sales Order</div>
-        <div class="pillar-count">6 membros</div>
+    <!-- GRAZIELA -->
+    <div class="leader-cluster">
+      <div class="card leader-card">
+        <div class="badge">Líder Técnico</div>
+        <div class="name">Graziela Cristina Ramos dos Santos</div>
+        <div class="sub">Analista Pleno</div>
       </div>
-      <div class="lead-row">
-        <div class="lead-name">Graziela Cristina Ramos dos Santos</div>
-        <div class="lead-role">Administrative Analyst</div>
-        <div class="lead-scope">também líder em Credit Due Dilligence</div>
-      </div>
-      <div class="pillar-members">
-        <div class="member-row">
-          <div class="member-name">Aline Roberta da Silva Pereira</div>
-          <div class="member-role">Administrative Analyst</div>
+
+      <svg class="cluster-svg" style="display:block;overflow:visible;width:100%;height:22px;"></svg>
+
+      <div class="cluster-pillars">
+        <div class="pillar-col p2 double">
+          <div class="pillar-header">
+            <div class="pillar-label">Sales Order</div>
+            <div class="pillar-count">5 membros</div>
+          </div>
+          <div class="pillar-members">
+            <div class="member-row">
+              <div class="member-name">Aline Roberta da Silva Pereira</div>
+              <div class="member-role">Analista Júnior</div>
+            </div>
+            <div class="member-row">
+              <div class="member-name">Andreia Pereira</div>
+              <div class="member-role">Analista Júnior</div>
+            </div>
+            <div class="member-row">
+              <div class="member-name">Ana Massei</div>
+              <div class="member-role">Assistente</div>
+            </div>
+            <div class="member-row">
+              <div class="member-name">Cristiane de Oliveira Matias Faustino</div>
+              <div class="member-role">Assistente</div>
+            </div>
+            <div class="member-row">
+              <div class="member-name">Leandra Carla de Barcelos</div>
+              <div class="member-role">Assistente</div>
+            </div>
+          </div>
         </div>
-        <div class="member-row">
-          <div class="member-name">Andreia Pereira</div>
-          <div class="member-role">Jr Administrative Analyst</div>
-        </div>
-        <div class="member-row">
-          <div class="member-name">Ana Massei</div>
-          <div class="member-role">Administrative Assistant</div>
-        </div>
-        <div class="member-row">
-          <div class="member-name">Cristiane de Oliveira Matias Faustino</div>
-          <div class="member-role">Administrative Assistant</div>
-        </div>
-        <div class="member-row">
-          <div class="member-name">Leandra Carla de Barcelos</div>
-          <div class="member-role">Administrative Assistant</div>
+
+        <div class="pillar-col p3 double">
+          <div class="pillar-header">
+            <div class="pillar-label">Credit Due Dilligence</div>
+            <div class="pillar-count">2 membros</div>
+          </div>
+          <div class="pillar-members">
+            <div class="member-row">
+              <div class="member-name">Alexandre Magno do Nascimento</div>
+              <div class="member-role">Assistente</div>
+            </div>
+            <div class="member-row">
+              <div class="member-name">Patricia da Silva Scapini</div>
+              <div class="member-role">Assistente</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 3. Credit Due Dilligence -->
-    <div class="pillar-col p3">
-      <div class="pillar-header">
-        <div class="pillar-label">Credit Due Dilligence</div>
-        <div class="pillar-count">2 membros</div>
+    <!-- GILBERTO -->
+    <div class="leader-cluster">
+      <div class="card leader-card">
+        <div class="badge">Líder Técnico</div>
+        <div class="name">Gilberto Junior</div>
+        <div class="sub">Analista Sênior</div>
       </div>
-      <div class="lead-row">
-        <div class="lead-name">Graziela Cristina Ramos dos Santos</div>
-        <div class="lead-role">Administrative Analyst</div>
-        <div class="lead-scope">também líder em Sales Order</div>
-      </div>
-      <div class="pillar-members">
-        <div class="member-row">
-          <div class="member-name">Alexandre Magno do Nascimento</div>
-          <div class="member-role">Administrative Clerk</div>
-        </div>
-        <div class="member-row">
-          <div class="member-name">Patricia da Silva Scapini</div>
-          <div class="member-role">Administrative Assistant</div>
+
+      <svg class="cluster-svg" style="display:block;overflow:visible;width:100%;height:22px;"></svg>
+
+      <div class="cluster-pillars single">
+        <div class="pillar-col p4">
+          <div class="pillar-header">
+            <div class="pillar-label">Customer Service</div>
+            <div class="pillar-count">2 membros</div>
+          </div>
+          <div class="pillar-members">
+            <div class="member-row">
+              <div class="member-name">Renato Silva</div>
+              <div class="member-role">Analista Júnior</div>
+            </div>
+            <div class="member-row">
+              <div class="member-name">Carla Araújo</div>
+              <div class="member-role">Assistente</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 4. Customer Service -->
-    <div class="pillar-col p4">
-      <div class="pillar-header">
-        <div class="pillar-label">Customer Service</div>
-        <div class="pillar-count">3 membros</div>
+    <!-- JULIA -->
+    <div class="leader-cluster">
+      <div class="card leader-card">
+        <div class="badge">Líder Técnico</div>
+        <div class="name">Júlia Marin</div>
+        <div class="sub">Analista Sênior</div>
       </div>
-      <div class="lead-row">
-        <div class="lead-name">Gilberto Junior</div>
-        <div class="lead-role">Administrative Analyst</div>
-      </div>
-      <div class="pillar-members">
-        <div class="member-row">
-          <div class="member-name">Carla Araújo</div>
-          <div class="member-role">Administrative Assistant</div>
-        </div>
-        <div class="member-row">
-          <div class="member-name">Renato Silva</div>
-          <div class="member-role">Administrative Analyst</div>
-        </div>
-      </div>
-    </div>
 
-    <!-- 5. Pre-Billing Analysis -->
-    <div class="pillar-col p5">
-      <div class="pillar-header">
-        <div class="pillar-label">Pre-Billing Analysis</div>
-        <div class="pillar-count">2 membros</div>
-      </div>
-      <div class="lead-row">
-        <div class="lead-name">Júlia Marin</div>
-        <div class="lead-role">Administrative Analyst</div>
-        <div class="lead-scope">também líder em Billing Data Intelligence</div>
-      </div>
-      <div class="pillar-members">
-        <div class="member-row">
-          <div class="member-name">Dândara Souza</div>
-          <div class="member-role">Administrative Assistant</div>
-        </div>
-      </div>
-    </div>
+      <svg class="cluster-svg" style="display:block;overflow:visible;width:100%;height:22px;"></svg>
 
-    <!-- 6. Billing Data Intelligence -->
-    <div class="pillar-col p6">
-      <div class="pillar-header">
-        <div class="pillar-label">Billing Data Intelligence</div>
-        <div class="pillar-count">2 membros</div>
-      </div>
-      <div class="lead-row">
-        <div class="lead-name">Júlia Marin</div>
-        <div class="lead-role">Administrative Analyst</div>
-        <div class="lead-scope">também líder em Pre-Billing Analysis</div>
-      </div>
-      <div class="pillar-members">
-        <div class="member-row">
-          <div class="member-name">Luiz Gabriel Fernandes</div>
-          <div class="member-role">Administrative Analyst</div>
+      <div class="cluster-pillars">
+        <div class="pillar-col p5 double">
+          <div class="pillar-header">
+            <div class="pillar-label">Pre-Billing Analysis</div>
+            <div class="pillar-count">1 membro</div>
+          </div>
+          <div class="pillar-members">
+            <div class="member-row">
+              <div class="member-name">Dândara Souza</div>
+              <div class="member-role">Assistente</div>
+            </div>
+          </div>
         </div>
-        <div class="member-row">
-          <div class="member-name">Gabriel Pimenta</div>
-          <div class="member-role">Administrative Analyst</div>
+
+        <div class="pillar-col p6 double">
+          <div class="pillar-header">
+            <div class="pillar-label">Billing Data Intelligence</div>
+            <div class="pillar-count">2 membros</div>
+          </div>
+          <div class="pillar-members">
+            <div class="member-row">
+              <div class="member-name">Luiz Gabriel Fernandes</div>
+              <div class="member-role">Analista Júnior</div>
+            </div>
+            <div class="member-row">
+              <div class="member-name">Gabriel Pimenta</div>
+              <div class="member-role">Analista Júnior</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -358,15 +510,15 @@
 
   <div class="legend">
     <div class="legend-item">
-      <div style="width:22px;height:8px;border-radius:2px;background:#f7f7fb;border:1px dashed #d4d3cf;"></div>
-      <span>Líder técnico</span>
+      <div style="width:22px;height:8px;border-radius:2px;background:#f6f7f9;border:1px solid #d4d3cf;"></div>
+      <span>Liderança técnica</span>
     </div>
     <div class="legend-item">
       <div style="width:22px;height:8px;border-radius:2px;background:white;border:1px solid #e8e7e3;"></div>
-      <span>Membro</span>
+      <span>Operadores do pilar</span>
     </div>
     <div class="legend-item" style="font-size:9px;font-style:italic;color:#b0afa8;">
-      * líderes que atuam em mais de um pilar aparecem nas colunas correspondentes
+      * hierarquia prevalece; pilares são subordinados à camada intermediária de liderança
     </div>
   </div>
 
@@ -379,52 +531,116 @@
 </footer>
 
 <script>
-  function drawConnectors() {
-    const svg = document.getElementById('connectorSVG');
-    const supCard = document.querySelector('.card-supervisor');
-    const pillarsEl = document.getElementById('pillarsContainer');
-    const cols = pillarsEl.querySelectorAll('.pillar-col');
+  function drawTopConnector() {
+    const svg = document.getElementById('topConnectorSVG');
+    const supCard = document.getElementById('supervisorCard');
+    const leadersRow = document.getElementById('leadersRow');
+    const leaderClusters = leadersRow.querySelectorAll('.leader-cluster');
     const bodyRect = document.body.getBoundingClientRect();
 
     const supRect = supCard.getBoundingClientRect();
     const supCX = supRect.left - bodyRect.left + supRect.width / 2;
     const supBottom = supRect.bottom - bodyRect.top;
 
-    const colData = [];
-    cols.forEach(col => {
-      const r = col.getBoundingClientRect();
-      colData.push({ cx: r.left - bodyRect.left + r.width / 2, top: r.top - bodyRect.top });
+    const clusterData = [];
+    leaderClusters.forEach(cluster => {
+      const r = cluster.getBoundingClientRect();
+      clusterData.push({
+        cx: r.left - bodyRect.left + r.width / 2,
+        top: r.top - bodyRect.top
+      });
     });
 
-    const colTop = colData[0].top;
-    const svgH = Math.max(colTop - supBottom, 10);
+    if (!clusterData.length) return;
+
+    const rowTop = Math.min(...clusterData.map(c => c.top));
+    const svgH = Math.max(rowTop - supBottom, 14);
     const midY = svgH / 2;
 
-    svg.style.width = '100%';
     svg.style.height = svgH + 'px';
 
     const svgRect = svg.getBoundingClientRect();
     const svgLeft = svgRect.left - bodyRect.left;
-    const W = svgRect.width || 1200;
+    const W = svgRect.width || window.innerWidth;
 
     svg.setAttribute('viewBox', `0 0 ${W} ${svgH}`);
 
-    const lSup  = supCX - svgLeft;
-    const lCols = colData.map(c => c.cx - svgLeft);
-    const lMin  = Math.min(...lCols);
-    const lMax  = Math.max(...lCols);
+    const lSup = supCX - svgLeft;
+    const lClusters = clusterData.map(c => c.cx - svgLeft);
+    const lMin = Math.min(...lClusters);
+    const lMax = Math.max(...lClusters);
 
     let html = '';
     html += `<line x1="${lSup}" y1="0" x2="${lSup}" y2="${midY}" stroke="#c8c7c3" stroke-width="1"/>`;
     html += `<line x1="${lMin}" y1="${midY}" x2="${lMax}" y2="${midY}" stroke="#c8c7c3" stroke-width="1"/>`;
-    lCols.forEach(cx => {
+    lClusters.forEach(cx => {
       html += `<line x1="${cx}" y1="${midY}" x2="${cx}" y2="${svgH}" stroke="#c8c7c3" stroke-width="1"/>`;
     });
+
     svg.innerHTML = html;
   }
 
-  window.addEventListener('load', () => setTimeout(drawConnectors, 120));
-  window.addEventListener('resize', drawConnectors);
+  function drawClusterConnectors() {
+    const clusters = document.querySelectorAll('.leader-cluster');
+
+    clusters.forEach(cluster => {
+      const svg = cluster.querySelector('.cluster-svg');
+      const leaderCard = cluster.querySelector('.leader-card');
+      const pillars = cluster.querySelectorAll('.pillar-col');
+
+      if (!svg || !leaderCard || !pillars.length) return;
+
+      const clusterRect = cluster.getBoundingClientRect();
+      const leaderRect = leaderCard.getBoundingClientRect();
+
+      const leaderCX = leaderRect.left - clusterRect.left + leaderRect.width / 2;
+      const leaderBottom = leaderRect.bottom - clusterRect.top;
+
+      const pillarData = [];
+      pillars.forEach(p => {
+        const r = p.getBoundingClientRect();
+        pillarData.push({
+          cx: r.left - clusterRect.left + r.width / 2,
+          top: r.top - clusterRect.top
+        });
+      });
+
+      const top = Math.min(...pillarData.map(p => p.top));
+      const svgH = Math.max(top - leaderBottom, 12);
+      const midY = svgH / 2;
+
+      svg.style.height = svgH + 'px';
+      const W = cluster.clientWidth;
+      svg.setAttribute('viewBox', `0 0 ${W} ${svgH}`);
+
+      const pXs = pillarData.map(p => p.cx);
+      const pMin = Math.min(...pXs);
+      const pMax = Math.max(...pXs);
+
+      let html = '';
+      html += `<line x1="${leaderCX}" y1="0" x2="${leaderCX}" y2="${midY}" stroke="#c8c7c3" stroke-width="1"/>`;
+
+      if (pillars.length === 1) {
+        html += `<line x1="${leaderCX}" y1="${midY}" x2="${pXs[0]}" y2="${midY}" stroke="#c8c7c3" stroke-width="1"/>`;
+        html += `<line x1="${pXs[0]}" y1="${midY}" x2="${pXs[0]}" y2="${svgH}" stroke="#c8c7c3" stroke-width="1"/>`;
+      } else {
+        html += `<line x1="${pMin}" y1="${midY}" x2="${pMax}" y2="${midY}" stroke="#c8c7c3" stroke-width="1"/>`;
+        pXs.forEach(px => {
+          html += `<line x1="${px}" y1="${midY}" x2="${px}" y2="${svgH}" stroke="#c8c7c3" stroke-width="1"/>`;
+        });
+      }
+
+      svg.innerHTML = html;
+    });
+  }
+
+  function drawAll() {
+    drawTopConnector();
+    drawClusterConnectors();
+  }
+
+  window.addEventListener('load', () => setTimeout(drawAll, 120));
+  window.addEventListener('resize', drawAll);
 </script>
 
 </body>
