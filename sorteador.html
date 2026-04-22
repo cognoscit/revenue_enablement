@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sorteador · Revenue Enablement</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,700;0,900;1,700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --bg: #f7f4ef;
+  --surface: #ffffff;
+  --border: #e3ddd4;
+  --text: #1c1916;
+  --muted: #9e9187;
+  --accent: #c84b2f;
+  --accent-bg: #fdf0ed;
+  --green: #2d7a4f;
+  --green-bg: #edf7f2;
+}
+
+body {
+  background: var(--bg);
+  font-family: 'DM Sans', sans-serif;
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 44px 20px 80px;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Header */
+.hdr { text-align: center; margin-bottom: 6px; }
+.hdr h1 {
+  font-family: 'Fraunces', serif;
+  font-weight: 900;
+  font-size: clamp(2.2rem, 6vw, 3.4rem);
+  letter-spacing: -2px;
+  line-height: 1.05;
+  color: var(--text);
+}
+.hdr h1 em { font-style: italic; color: var(--accent); }
+.hdr small {
+  display: block;
+  margin-top: 7px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Card */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: 0 1px 8px rgba(0,0,0,.04);
+}
+.card-label {
+  font-size: 0.67rem;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.82rem;
+  padding: 12px 14px;
+  resize: vertical;
+  min-height: 108px;
+  outline: none;
+  line-height: 1.65;
+  transition: border-color .2s;
+}
+textarea:focus { border-color: var(--accent); }
+textarea::placeholder { color: var(--muted); }
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.badge {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+.badge.hidden { display: none; }
+
+.qty-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.qty-label { font-size: 0.8rem; color: var(--muted); }
+.qty-ctrl {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.qty-btn {
+  background: var(--bg);
+  border: none;
+  width: 34px; height: 34px;
+  font-size: 1rem; font-weight: 700;
+  cursor: pointer;
+  color: var(--text);
+  transition: background .15s;
+}
+.qty-btn:hover { background: var(--border); }
+.qty-num {
+  width: 38px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.92rem; font-weight: 700;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  color: var(--accent);
+}
+
+/* Botão */
+.btn-sort {
+  width: 100%;
+  padding: 16px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-family: 'Fraunces', serif;
+  font-weight: 700;
+  font-size: 1.15rem;
+  cursor: pointer;
+  transition: background .2s, transform .1s, box-shadow .2s;
+  box-shadow: 0 4px 18px rgba(200,75,47,.22);
+}
+.btn-sort:hover { background: #b03d23; box-shadow: 0 6px 26px rgba(200,75,47,.32); }
+.btn-sort:active { transform: scale(.98); }
+.btn-sort:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; box-shadow: none; transform: none; }
+
+/* Roleta */
+.roulette-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 8px rgba(0,0,0,.04);
+  display: none;
+  position: relative;
+}
+.roulette-wrap.on { display: block; }
+
+.round-lbl {
+  position: absolute;
+  top: 10px; right: 14px;
+  font-size: 0.68rem; font-weight: 600;
+  color: var(--muted);
+  z-index: 4;
+  letter-spacing: 1px;
+}
+
+.roulette-vp {
+  overflow: hidden;
+  position: relative;
+  padding: 14px 0;
+}
+.roulette-vp::before,
+.roulette-vp::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 80px;
+  z-index: 2;
+  pointer-events: none;
+}
+.roulette-vp::before { left: 0; background: linear-gradient(to right, #fff, transparent); }
+.roulette-vp::after  { right: 0; background: linear-gradient(to left,  #fff, transparent); }
+
+.center-bar {
+  position: absolute;
+  left: 50%; top: 0; bottom: 0;
+  transform: translateX(-50%);
+  width: 2px;
+  background: var(--accent);
+  opacity: .45;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.roulette-track {
+  display: flex;
+  gap: 10px;
+  will-change: transform;
+  padding: 0 50%;
+}
+
+.r-item {
+  flex-shrink: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: color .07s, border-color .07s, background .07s;
+}
+.r-item.lit {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+  font-weight: 700;
+}
+
+/* Vencedores */
+.winners-card {
+  background: var(--surface);
+  border: 1.5px solid #a8dbbf;
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: 0 1px 8px rgba(0,0,0,.04);
+  display: none;
+  animation: fadeUp .35s ease;
+}
+.winners-card.on { display: block; }
+
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+.w-title {
+  font-family: 'Fraunces', serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--green);
+  margin-bottom: 14px;
+}
+
+.w-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  background: var(--green-bg);
+  border: 1px solid #c4e8d4;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  animation: popIn .3s cubic-bezier(.34,1.56,.64,1) both;
+}
+.w-item:last-of-type { margin-bottom: 0; }
+
+@keyframes popIn {
+  from { opacity:0; transform:scale(.88); }
+  to   { opacity:1; transform:scale(1); }
+}
+
+.w-num { font-size: 0.68rem; font-weight: 700; color: var(--muted); min-width: 20px; }
+.w-name { font-family: 'Fraunces', serif; font-size: 1.05rem; font-weight: 700; color: var(--text); flex: 1; }
+.w-email { font-size: 0.72rem; color: var(--muted); }
+.w-trophy { font-size: 1.1rem; }
+
+.btn-reset {
+  margin-top: 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: border-color .2s, color .2s;
+}
+.btn-reset:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Confetes */
+.cp {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  border-radius: 3px;
+  animation: cfall linear forwards;
+}
+@keyframes cfall {
+  0%   { opacity:1; transform:translateY(-10px) rotate(0deg); }
+  100% { opacity:0; transform:translateY(105vh) rotate(600deg); }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hdr">
+    <h1>Sorteador <em>de Nomes</em></h1>
+    <small>Revenue Enablement · GBS</small>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Lista de participantes</div>
+    <textarea id="inputList" placeholder='"Silva, João" <joao@adm.com>; "Souza, Maria" <maria@adm.com>; ...'></textarea>
+    <div class="meta-row">
+      <div class="badge hidden" id="badge"></div>
+      <div class="qty-wrap">
+        <span class="qty-label">Sortear</span>
+        <div class="qty-ctrl">
+          <button class="qty-btn" id="btnMinus">−</button>
+          <div class="qty-num" id="qtyNum">1</div>
+          <button class="qty-btn" id="btnPlus">+</button>
+        </div>
+        <span class="qty-label">nome(s)</span>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-sort" id="btnSort" disabled>🎲 Sortear</button>
+
+  <div class="roulette-wrap" id="rWrap">
+    <div class="round-lbl" id="roundLbl"></div>
+    <div class="roulette-vp">
+      <div class="center-bar"></div>
+      <div class="roulette-track" id="rTrack"></div>
+    </div>
+  </div>
+
+  <div class="winners-card" id="wCard">
+    <div class="w-title">🏆 Sorteado(s)</div>
+    <div id="wList"></div>
+    <button class="btn-reset" id="btnReset">↺ Novo sorteio</button>
+  </div>
+
+</div>
+<script>
+let participants = [];
+let qty = 1;
+
+const inputList = document.getElementById('inputList');
+const badge     = document.getElementById('badge');
+const btnMinus  = document.getElementById('btnMinus');
+const btnPlus   = document.getElementById('btnPlus');
+const qtyNum    = document.getElementById('qtyNum');
+const btnSort   = document.getElementById('btnSort');
+const rWrap     = document.getElementById('rWrap');
+const rTrack    = document.getElementById('rTrack');
+const roundLbl  = document.getElementById('roundLbl');
+const wCard     = document.getElementById('wCard');
+const wList     = document.getElementById('wList');
+const btnReset  = document.getElementById('btnReset');
+
+function parse(raw) {
+  return raw.split(';').map(s => s.trim()).filter(Boolean).map(e => {
+    const m = e.match(/"([^"]+)"\s*<([^>]+)>/);
+    if (m) {
+      const parts = m[1].split(',').map(x => x.trim());
+      const name = parts.length === 2 ? `${parts[1]} ${parts[0]}` : m[1];
+      return { name, email: m[2] };
+    }
+    return { name: e, email: '' };
+  });
+}
+
+inputList.addEventListener('input', () => {
+  participants = parse(inputList.value);
+  badge.textContent = `${participants.length} participantes`;
+  badge.classList.toggle('hidden', participants.length === 0);
+  qty = Math.min(qty, Math.max(1, participants.length));
+  qtyNum.textContent = qty;
+  btnSort.disabled = participants.length < 1;
+});
+
+btnMinus.addEventListener('click', () => { if (qty > 1) { qty--; qtyNum.textContent = qty; } });
+btnPlus.addEventListener('click',  () => { if (qty < participants.length) { qty++; qtyNum.textContent = qty; } });
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+btnSort.addEventListener('click', () => {
+  if (!participants.length) return;
+
+  // Sortear AGORA — a roleta é só animação do resultado
+  const winners = shuffle(participants).slice(0, qty);
+
+  btnSort.disabled = true;
+  wCard.classList.remove('on');
+  wList.innerHTML = '';
+  rWrap.classList.add('on');
+
+  runRounds(winners, 0);
+});
+
+function runRounds(winners, idx) {
+  if (idx >= winners.length) {
+    showWinners(winners);
+    return;
+  }
+  roundLbl.textContent = winners.length > 1 ? `${idx + 1} de ${winners.length}` : '';
+  spinTo(winners[idx], () => {
+    setTimeout(() => runRounds(winners, idx + 1), winners.length > 1 ? 800 : 0);
+  });
+}
+
+function spinTo(winner, onDone) {
+  const ITEM_W = 150; // px (largura do item + gap)
+  const SPIN   = 55;  // itens antes do vencedor
+
+  // Montar reel: itens aleatórios + vencedor no final
+  const pool = shuffle(participants);
+  const reel  = [];
+  for (let i = 0; i < SPIN; i++) reel.push(pool[i % pool.length]);
+  reel.push(winner); // <-- posição garantida
+  const landIdx = reel.length - 1;
+
+  // DOM
+  rTrack.innerHTML = '';
+  reel.forEach(p => {
+    const el = document.createElement('span');
+    el.className = 'r-item';
+    el.textContent = p.name;
+    rTrack.appendChild(el);
+  });
+
+  const items = rTrack.querySelectorAll('.r-item');
+  const targetX  = -(landIdx * ITEM_W);
+  const duration = 3000;
+  const t0 = performance.now();
+  let litIdx = -1;
+
+  function ease(t) { return 1 - Math.pow(1 - t, 3.8); }
+
+  function tick(now) {
+    const prog  = Math.min((now - t0) / duration, 1);
+    const x     = targetX * ease(prog);
+    rTrack.style.transform = `translateX(${x}px)`;
+
+    const ci = Math.round(-x / ITEM_W);
+    if (ci !== litIdx) {
+      if (litIdx >= 0 && items[litIdx]) items[litIdx].classList.remove('lit');
+      if (items[ci]) items[ci].classList.add('lit');
+      litIdx = ci;
+    }
+
+    if (prog < 1) { requestAnimationFrame(tick); return; }
+
+    // Garantir vencedor lit no final
+    items.forEach(el => el.classList.remove('lit'));
+    if (items[landIdx]) items[landIdx].classList.add('lit');
+    setTimeout(onDone, 500);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+function showWinners(winners) {
+  wList.innerHTML = '';
+  winners.forEach((w, i) => {
+    const div = document.createElement('div');
+    div.className = 'w-item';
+    div.style.animationDelay = `${i * 0.1}s`;
+    div.innerHTML = `
+      <span class="w-num">#${i+1}</span>
+      <span class="w-name">${w.name}</span>
+      ${w.email ? `<span class="w-email">${w.email}</span>` : ''}
+      <span class="w-trophy">🏆</span>`;
+    wList.appendChild(div);
+  });
+  wCard.classList.add('on');
+  btnSort.disabled = false;
+  confetti();
+}
+
+function confetti() {
+  const cols = ['#c84b2f','#f5a623','#2d7a4f','#4a90d9','#e8c653','#b07d2a'];
+  for (let i = 0; i < 65; i++) {
+    setTimeout(() => {
+      const el = document.createElement('div');
+      el.className = 'cp';
+      el.style.cssText = `
+        left:${Math.random()*100}vw;
+        top:-12px;
+        width:${7+Math.random()*7}px;
+        height:${7+Math.random()*7}px;
+        background:${cols[Math.floor(Math.random()*cols.length)]};
+        animation-duration:${1.6+Math.random()*2}s;
+      `;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 4500);
+    }, i * 28);
+  }
+}
+
+btnReset.addEventListener('click', () => {
+  wCard.classList.remove('on');
+  rWrap.classList.remove('on');
+  btnSort.disabled = participants.length < 1;
+});
+</script>
+</body>
+</html>
