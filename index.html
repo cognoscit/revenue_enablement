@@ -3082,12 +3082,12 @@ function openFolgaModal(dateStr) {
     + '<div style="max-height:240px;overflow-y:auto;">' + memberChks + '</div>';
 
   const rmBtn = existing
-    ? '<button class="btn btn-d btn-sm" onclick="removeHoliday(' + JSON.stringify(dateStr) + ');closeModal()">🗑 Remover folga</button>'
+    ? '<button class="btn btn-d btn-sm" onclick="removeHoliday(\'' + dateStr + '\');closeModal()">🗑 Remover folga</button>'
     : '';
 
   const foot = rmBtn
     + '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
-    + '<button class="btn btn-p" onclick="saveFolgaModal(' + JSON.stringify(dateStr) + ')">✓ Salvar</button>';
+    + '<button class="btn btn-p" onclick="saveFolgaModal(\'' + dateStr + '\')">✓ Salvar</button>';
 
   openModal({ title: '🏖 Folga — ' + fmtShort(dateStr), body, foot });
 }
