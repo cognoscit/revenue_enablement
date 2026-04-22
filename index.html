@@ -1,520 +1,729 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Revenue Enablement · GBS South America</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800;900&family=Barlow:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Revenue Enablement · GBS South America</title>
 
-:root {
-  --adm-navy:   #002060;
-  --adm-green:  #00AD50;
-  --adm-orange: #DC582A;
-  --adm-yellow: #FFC000;
-  --bg:         #f4f5f7;
-  --surface:    #ffffff;
-  --border:     #e2e5ea;
-  --text-1:     #0f1a2e;
-  --text-2:     #4a5568;
-  --text-3:     #8a95a3;
-  --radius:     12px;
-}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800;900&family=Barlow:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-html { scroll-behavior: smooth; }
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-body {
-  font-family: 'Barlow', sans-serif;
-  background: var(--bg);
-  color: var(--text-1);
-  min-height: 100vh;
-  overflow-x: hidden;
-}
+    :root {
+      --adm-navy:   #002060;
+      --adm-green:  #00AD50;
+      --adm-orange: #DC582A;
+      --adm-yellow: #FFC000;
+      --bg:         #f4f5f7;
+      --surface:    #ffffff;
+      --border:     #e2e5ea;
+      --text-1:     #0f1a2e;
+      --text-2:     #4a5568;
+      --text-3:     #8a95a3;
+      --radius:     12px;
+      --shadow-soft: 0 12px 40px rgba(0,0,0,.10);
+    }
 
-/* ── HEADER ── */
-.header {
-  background: var(--adm-navy);
-  padding: 0 48px;
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  box-shadow: 0 2px 20px rgba(0,0,0,.25);
-}
-.header-brand {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.header-logo {
-  width: 36px;
-  height: 36px;
-}
-.header-name {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-.header-sub {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  color: rgba(255,255,255,.5);
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  margin-top: 1px;
-}
-.header-tag {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: rgba(255,255,255,.45);
-  letter-spacing: .1em;
-}
+    html {
+      scroll-behavior: smooth;
+    }
 
-/* ── HERO ── */
-.hero {
-  background: var(--adm-navy);
-  padding: 72px 48px 80px;
-  position: relative;
-  overflow: hidden;
-}
-.hero::after {
-  content: '';
-  position: absolute;
-  right: -60px;
-  bottom: -60px;
-  width: 400px;
-  height: 400px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(0,173,80,.12) 0%, transparent 70%);
-  pointer-events: none;
-}
-.hero::before {
-  content: '';
-  position: absolute;
-  left: 40%;
-  top: -80px;
-  width: 600px;
-  height: 600px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,255,255,.03) 0%, transparent 70%);
-  pointer-events: none;
-}
-.hero-label {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--adm-green);
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.hero-label::before {
-  content: '';
-  width: 24px;
-  height: 2px;
-  background: var(--adm-green);
-  display: inline-block;
-}
-.hero-title {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: clamp(40px, 6vw, 72px);
-  font-weight: 800;
-  color: #fff;
-  line-height: 1.0;
-  letter-spacing: -.01em;
-  margin-bottom: 16px;
-  text-transform: uppercase;
-}
-.hero-title span { color: var(--adm-green); }
-.hero-desc {
-  font-size: 16px;
-  font-weight: 300;
-  color: rgba(255,255,255,.6);
-  max-width: 520px;
-  line-height: 1.65;
-  margin-bottom: 36px;
-}
-.hero-pills {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.hero-pill {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  letter-spacing: .08em;
-  padding: 5px 12px;
-  border-radius: 99px;
-  border: 1px solid rgba(255,255,255,.15);
-  color: rgba(255,255,255,.5);
-  text-transform: uppercase;
-}
+    body {
+      font-family: 'Barlow', sans-serif;
+      background: var(--bg);
+      color: var(--text-1);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
 
-/* ── DIVIDER ── */
-.divider {
-  height: 4px;
-  background: linear-gradient(90deg, var(--adm-green) 0%, var(--adm-yellow) 50%, var(--adm-orange) 100%);
-}
+    a {
+      color: inherit;
+    }
 
-/* ── MAIN ── */
-.main {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 64px 48px;
-}
+    /* ── HEADER ───────────────────────────────────────── */
+    .header {
+      background: var(--adm-navy);
+      padding: 0 48px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 20px rgba(0,0,0,.25);
+    }
 
-.section-label {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--text-3);
-  margin-bottom: 24px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.section-label::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
 
-/* ── APP CARDS ── */
-.apps-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 24px;
-  margin-bottom: 64px;
-}
+    .header-logo {
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+    }
 
-.app-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  text-decoration: none;
-  color: inherit;
-  display: flex;
-  flex-direction: column;
-  transition: transform .2s, box-shadow .2s, border-color .2s;
-  cursor: pointer;
-}
-.app-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 40px rgba(0,0,0,.1);
-  border-color: transparent;
-}
-.app-card:hover .app-arrow { transform: translateX(4px); }
+    .header-name {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
 
-.app-card-top {
-  height: 6px;
-}
-.app-card-body {
-  padding: 28px 28px 24px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-.app-icon-wrap {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  margin-bottom: 18px;
-  flex-shrink: 0;
-}
-.app-card-title {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: .02em;
-  text-transform: uppercase;
-  margin-bottom: 6px;
-}
-.app-card-sub {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--text-3);
-  margin-bottom: 14px;
-}
-.app-card-desc {
-  font-size: 13.5px;
-  color: var(--text-2);
-  line-height: 1.65;
-  flex: 1;
-  margin-bottom: 20px;
-}
-.app-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-.app-features {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.app-feature {
-  font-size: 10px;
-  font-family: 'JetBrains Mono', monospace;
-  padding: 3px 8px;
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--text-3);
-  letter-spacing: .04em;
-}
-.app-arrow {
-  font-size: 18px;
-  color: var(--text-3);
-  transition: transform .2s;
-  flex-shrink: 0;
-}
+    .header-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: rgba(255,255,255,.5);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
 
-/* Card accent colors */
-.accent-navy  .app-card-top { background: var(--adm-navy); }
-.accent-navy  .app-icon-wrap { background: rgba(0,32,96,.08); }
-.accent-navy  .app-card-title { color: var(--adm-navy); }
-.accent-navy  .app-arrow { color: var(--adm-navy); }
+    .header-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: rgba(255,255,255,.45);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      text-align: right;
+      line-height: 1.5;
+    }
 
-.accent-green .app-card-top { background: var(--adm-green); }
-.accent-green .app-icon-wrap { background: rgba(0,173,80,.08); }
-.accent-green .app-card-title { color: #00843c; }
-.accent-green .app-arrow { color: var(--adm-green); }
+    .header-tag a {
+      color: rgba(255,255,255,.78);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(255,255,255,.28);
+      transition: color .2s, border-color .2s;
+    }
 
-.accent-orange .app-card-top { background: var(--adm-orange); }
-.accent-orange .app-icon-wrap { background: rgba(220,88,42,.08); }
-.accent-orange .app-card-title { color: var(--adm-orange); }
-.accent-orange .app-arrow { color: var(--adm-orange); }
+    .header-tag a:hover {
+      color: #fff;
+      border-color: rgba(255,255,255,.6);
+    }
 
-/* ── INFO STRIP ── */
-.info-strip {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 28px 32px;
-  display: flex;
-  gap: 40px;
-  flex-wrap: wrap;
-  margin-bottom: 64px;
-}
-.info-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.info-stat-val {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 32px;
-  font-weight: 800;
-  color: var(--adm-navy);
-  line-height: 1;
-}
-.info-stat-lbl {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-.info-divider {
-  width: 1px;
-  background: var(--border);
-  align-self: stretch;
-}
+    /* ── HERO ─────────────────────────────────────────── */
+    .hero {
+      background: var(--adm-navy);
+      padding: 72px 48px 80px;
+      position: relative;
+      overflow: hidden;
+    }
 
-/* ── FOOTER ── */
-.footer {
-  background: var(--adm-navy);
-  padding: 28px 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-.footer-left {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  letter-spacing: .1em;
-  color: rgba(255,255,255,.35);
-  text-transform: uppercase;
-}
-.footer-right {
-  font-size: 12px;
-  color: rgba(255,255,255,.3);
-}
+    .hero::after {
+      content: '';
+      position: absolute;
+      right: -60px;
+      bottom: -60px;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,173,80,.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
 
-/* ── ANIMATION ── */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.hero-label { animation: fadeUp .5s ease both; }
-.hero-title { animation: fadeUp .5s .1s ease both; }
-.hero-desc  { animation: fadeUp .5s .2s ease both; }
-.hero-pills { animation: fadeUp .5s .3s ease both; }
-.app-card   { animation: fadeUp .4s ease both; }
-.app-card:nth-child(2) { animation-delay: .1s; }
-.app-card:nth-child(3) { animation-delay: .2s; }
+    .hero::before {
+      content: '';
+      position: absolute;
+      left: 40%;
+      top: -80px;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,.03) 0%, transparent 70%);
+      pointer-events: none;
+    }
 
-@media (max-width: 600px) {
-  .header, .hero, .main, .footer { padding-left: 20px; padding-right: 20px; }
-  .hero { padding-top: 48px; padding-bottom: 56px; }
-  .info-strip { flex-direction: column; gap: 20px; }
-  .info-divider { display: none; }
-}
-</style>
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      max-width: 760px;
+    }
+
+    .hero-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--adm-green);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hero-label::before {
+      content: '';
+      width: 24px;
+      height: 2px;
+      background: var(--adm-green);
+      display: inline-block;
+    }
+
+    .hero-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.0;
+      letter-spacing: -.01em;
+      margin-bottom: 16px;
+      text-transform: uppercase;
+    }
+
+    .hero-title span {
+      color: var(--adm-green);
+    }
+
+    .hero-desc {
+      font-size: 16px;
+      font-weight: 300;
+      color: rgba(255,255,255,.68);
+      max-width: 560px;
+      line-height: 1.7;
+      margin-bottom: 36px;
+    }
+
+    .hero-pills {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .hero-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: .08em;
+      padding: 6px 12px;
+      border-radius: 99px;
+      border: 1px solid rgba(255,255,255,.15);
+      color: rgba(255,255,255,.58);
+      text-transform: uppercase;
+    }
+
+    /* ── DIVIDER ──────────────────────────────────────── */
+    .divider {
+      height: 4px;
+      background: linear-gradient(
+        90deg,
+        var(--adm-green) 0%,
+        var(--adm-yellow) 50%,
+        var(--adm-orange) 100%
+      );
+    }
+
+    /* ── MAIN ─────────────────────────────────────────── */
+    .main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 64px 48px;
+    }
+
+    .section-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── APP CARDS ────────────────────────────────────── */
+    .apps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+      margin-bottom: 40px;
+    }
+
+    .app-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      transition: transform .2s, box-shadow .2s, border-color .2s;
+      cursor: pointer;
+    }
+
+    .app-card:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-soft);
+      border-color: transparent;
+    }
+
+    .app-card:hover .app-arrow {
+      transform: translateX(4px);
+    }
+
+    .app-card-top {
+      height: 6px;
+    }
+
+    .app-card-body {
+      padding: 28px 28px 24px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .app-icon-wrap {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      margin-bottom: 18px;
+      flex-shrink: 0;
+    }
+
+    .app-card-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      line-height: 1.05;
+    }
+
+    .app-card-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 14px;
+    }
+
+    .app-card-desc {
+      font-size: 13.5px;
+      color: var(--text-2);
+      line-height: 1.7;
+      flex: 1;
+      margin-bottom: 20px;
+    }
+
+    .app-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .app-features {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .app-feature {
+      font-size: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--bg);
+      color: var(--text-3);
+      letter-spacing: .04em;
+    }
+
+    .app-arrow {
+      font-size: 18px;
+      color: var(--text-3);
+      transition: transform .2s;
+      flex-shrink: 0;
+    }
+
+    /* Card accent colors */
+    .accent-navy .app-card-top { background: var(--adm-navy); }
+    .accent-navy .app-icon-wrap { background: rgba(0,32,96,.08); }
+    .accent-navy .app-card-title { color: var(--adm-navy); }
+    .accent-navy .app-arrow { color: var(--adm-navy); }
+
+    .accent-green .app-card-top { background: var(--adm-green); }
+    .accent-green .app-icon-wrap { background: rgba(0,173,80,.08); }
+    .accent-green .app-card-title { color: #00843c; }
+    .accent-green .app-arrow { color: var(--adm-green); }
+
+    .accent-orange .app-card-top { background: var(--adm-orange); }
+    .accent-orange .app-icon-wrap { background: rgba(220,88,42,.08); }
+    .accent-orange .app-card-title { color: var(--adm-orange); }
+    .accent-orange .app-arrow { color: var(--adm-orange); }
+
+    /* ── GUIDANCE PANEL ───────────────────────────────── */
+    .info-strip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0;
+      overflow: hidden;
+      margin-bottom: 64px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.03);
+    }
+
+    .info-strip-header {
+      background: linear-gradient(90deg, rgba(0,32,96,.04) 0%, rgba(0,173,80,.05) 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 24px;
+    }
+
+    .info-strip-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--adm-navy);
+      text-transform: uppercase;
+      letter-spacing: .03em;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+
+    .info-strip-sub {
+      font-size: 13px;
+      color: var(--text-2);
+      line-height: 1.6;
+    }
+
+    .guidance-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .guidance-item {
+      padding: 24px;
+      border-right: 1px solid var(--border);
+    }
+
+    .guidance-item:last-child {
+      border-right: none;
+    }
+
+    .guidance-step {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 10px;
+    }
+
+    .guidance-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-1);
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+
+    .guidance-text {
+      font-size: 13.5px;
+      color: var(--text-2);
+      line-height: 1.7;
+    }
+
+    /* ── FOOTER ───────────────────────────────────────── */
+    .footer {
+      background: var(--adm-navy);
+      padding: 28px 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .footer-left {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: .1em;
+      color: rgba(255,255,255,.35);
+      text-transform: uppercase;
+    }
+
+    .footer-right {
+      font-size: 12px;
+      color: rgba(255,255,255,.3);
+    }
+
+    /* ── ANIMATION ────────────────────────────────────── */
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .hero-label { animation: fadeUp .5s ease both; }
+    .hero-title { animation: fadeUp .5s .1s ease both; }
+    .hero-desc  { animation: fadeUp .5s .2s ease both; }
+    .hero-pills { animation: fadeUp .5s .3s ease both; }
+    .app-card   { animation: fadeUp .4s ease both; }
+    .app-card:nth-child(2) { animation-delay: .08s; }
+    .app-card:nth-child(3) { animation-delay: .16s; }
+
+    /* ── RESPONSIVE ───────────────────────────────────── */
+    @media (max-width: 900px) {
+      .guidance-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .guidance-item {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .guidance-item:last-child {
+        border-bottom: none;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .header {
+        padding-left: 20px;
+        padding-right: 20px;
+        height: auto;
+        min-height: 64px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        align-items: flex-start;
+        gap: 14px;
+      }
+
+      .header {
+        flex-direction: column;
+      }
+
+      .header-tag {
+        text-align: left;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .hero,
+      .main,
+      .footer {
+        padding-left: 20px;
+        padding-right: 20px;
+      }
+
+      .hero {
+        padding-top: 48px;
+        padding-bottom: 56px;
+      }
+
+      .info-strip-header,
+      .guidance-item {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+    }
+  </style>
 </head>
 <body>
 
-<!-- HEADER -->
-<header class="header">
-  <div class="header-brand">
-    <!-- ADM Logo SVG simplified -->
-    <svg class="header-logo" viewBox="0 0 36 36" fill="none">
-      <rect width="36" height="36" rx="4" fill="rgba(255,255,255,.08)"/>
-      <path d="M7 27L14 9h3l7 18h-3.5l-1.5-4h-6.5L11 27H7zm5.5-7h4.5l-2.2-6-2.3 6z" fill="white"/>
-      <path d="M21 9h5.5c4 0 6.5 2.5 6.5 9s-2.5 9-6.5 9H21V9zm3 3v12h2.5c2 0 3.5-1.5 3.5-6s-1.5-6-3.5-6H24z" fill="rgba(0,173,80,.9)"/>
-    </svg>
-    <div>
-      <div class="header-name">Revenue Enablement</div>
-      <div class="header-sub">GBS South America · ADM</div>
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-brand">
+      <svg class="header-logo" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+        <rect width="36" height="36" rx="4" fill="rgba(255,255,255,.08)"/>
+        <path d="M7 27L14 9h3l7 18h-3.5l-1.5-4h-6.5L11 27H7zm5.5-7h4.5l-2.2-6-2.3 6z" fill="white"/>
+        <path d="M21 9h5.5c4 0 6.5 2.5 6.5 9s-2.5 9-6.5 9H21V9zm3 3v12h2.5c2 0 3.5-1.5 3.5-6s-1.5-6-3.5-6H24z" fill="rgba(0,173,80,.9)"/>
+      </svg>
+
+      <div>
+        <div class="header-name">Revenue Enablement</div>
+        <div class="header-sub">GBS South America · ADM</div>
+      </div>
     </div>
-  </div>
-  <div class="header-tag">P2C Tower · Ribeirão Preto</div>
-</header>
 
-<!-- HERO -->
-<section class="hero">
-  <div class="hero-label">Global Business Services</div>
-  <h1 class="hero-title">
-    Ferramentas<br>
-    <span>Operacionais</span>
-  </h1>
-  <p class="hero-desc">
-    Plataforma interna de apoio à gestão do time de Revenue Enablement.
-    Ritual de Gestão SDM, análises e utilitários de operação.
-  </p>
-  <div class="hero-pills">
-    <span class="hero-pill">Prospect-to-Cash</span>
-    <span class="hero-pill">17 colaboradores</span>
-    <span class="hero-pill">6 pilares</span>
-    <span class="hero-pill">GBS SA</span>
-  </div>
-</section>
-<div class="divider"></div>
+    <div class="header-tag">
+      P2C Tower · Ribeirão Preto ·
+      <a href="organograma.html">Organograma</a>
+    </div>
+  </header>
 
-<!-- MAIN -->
-<main class="main">
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-content">
+      <div class="hero-label">Global Business Services</div>
 
-  <div class="section-label">Aplicações disponíveis</div>
+      <h1 class="hero-title">
+        Ferramentas<br>
+        <span>Operacionais</span>
+      </h1>
 
-  <div class="apps-grid">
+      <p class="hero-desc">
+        Plataforma interna de apoio à gestão do time de Revenue Enablement.
+        Centralize acessos, consulte a estrutura oficial da equipe e execute os
+        rituais operacionais com maior clareza e consistência.
+      </p>
 
-    <!-- RITUAL -->
-    <a class="app-card accent-navy" href="ritual.html">
-      <div class="app-card-top"></div>
-      <div class="app-card-body">
-        <div class="app-icon-wrap">⚡</div>
-        <div class="app-card-title">Ritual de Gestão</div>
-        <div class="app-card-sub">SDM · Revenue Enablement</div>
-        <p class="app-card-desc">
-          Painel operacional do time. Ritual matinal de apuração D-1, gestão de entregas recorrentes,
-          Dashboard Executivo, backlog por aging, folgas e feriados, relatório semanal PDF.
-        </p>
-        <div class="app-card-footer">
-          <div class="app-features">
-            <span class="app-feature">Ritual</span>
-            <span class="app-feature">KPIs</span>
-            <span class="app-feature">Dashboard</span>
-            <span class="app-feature">GitHub Sync</span>
+      <div class="hero-pills">
+        <span class="hero-pill">Prospect-to-Cash</span>
+        <span class="hero-pill">SDM</span>
+        <span class="hero-pill">Governança</span>
+        <span class="hero-pill">Rotina operacional</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="section-label">Aplicações disponíveis</div>
+
+    <div class="apps-grid">
+      <!-- ORGANOGRAMA -->
+      <a class="app-card accent-orange" href="organograma.html">
+        <div class="app-card-top"></div>
+        <div class="app-card-body">
+          <div class="app-icon-wrap">🏢</div>
+          <div class="app-card-title">Organograma</div>
+          <div class="app-card-sub">Estrutura organizacional</div>
+          <p class="app-card-desc">
+            Visualização da estrutura oficial do time de Revenue Enablement, com
+            hierarquia, papéis, liderança e distribuição por frentes operacionais.
+          </p>
+          <div class="app-card-footer">
+            <div class="app-features">
+              <span class="app-feature">Governança</span>
+              <span class="app-feature">Estrutura</span>
+            </div>
+            <span class="app-arrow">→</span>
           </div>
-          <span class="app-arrow">→</span>
+        </div>
+      </a>
+
+      <!-- RITUAL -->
+      <a class="app-card accent-navy" href="ritual.html">
+        <div class="app-card-top"></div>
+        <div class="app-card-body">
+          <div class="app-icon-wrap">⚡</div>
+          <div class="app-card-title">Ritual de Gestão</div>
+          <div class="app-card-sub">SDM · Revenue Enablement</div>
+          <p class="app-card-desc">
+            Painel operacional do time para apuração D-1, acompanhamento de entregas,
+            dashboard executivo, backlog por aging, agenda do time e consolidação
+            de rotinas recorrentes.
+          </p>
+          <div class="app-card-footer">
+            <div class="app-features">
+              <span class="app-feature">Ritual</span>
+              <span class="app-feature">KPIs</span>
+              <span class="app-feature">Dashboard</span>
+            </div>
+            <span class="app-arrow">→</span>
+          </div>
+        </div>
+      </a>
+
+      <!-- SORTEADOR -->
+      <a class="app-card accent-green" href="sorteador.html">
+        <div class="app-card-top"></div>
+        <div class="app-card-body">
+          <div class="app-icon-wrap">🎲</div>
+          <div class="app-card-title">Sorteador</div>
+          <div class="app-card-sub">Utilitário de equipe</div>
+          <p class="app-card-desc">
+            Ferramenta de apoio para distribuição aleatória de tarefas, seleção de
+            participantes e dinâmicas internas com transparência e agilidade.
+          </p>
+          <div class="app-card-footer">
+            <div class="app-features">
+              <span class="app-feature">Sorteio</span>
+              <span class="app-feature">Time</span>
+            </div>
+            <span class="app-arrow">→</span>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <!-- GUIDANCE PANEL -
+    <section class="info-strip" aria-label="Orientações de uso">
+      <div class="info-strip-header">
+        <div class="info-strip-title">Orientações de navegação</div>
+        <div class="info-strip-sub">
+          Este portal foi estruturado para apoiar rotina, clareza organizacional e disciplina operacional.
         </div>
       </div>
-    </a>
 
-    <!-- SORTEADOR -->
-    <a class="app-card accent-green" href="sorteador.html">
-      <div class="app-card-top"></div>
-      <div class="app-card-body">
-        <div class="app-icon-wrap">🎲</div>
-        <div class="app-card-title">Sorteador</div>
-        <div class="app-card-sub">Utilitário de equipe</div>
-        <p class="app-card-desc">
-          Ferramenta de sorteio para o time. Distribua tarefas, selecione colaboradores ou
-          realize dinâmicas de forma aleatória e transparente.
-        </p>
-        <div class="app-card-footer">
-          <div class="app-features">
-            <span class="app-feature">Sorteio</span>
-            <span class="app-feature">Time</span>
+      <div class="guidance-grid">
+        <div class="guidance-item">
+          <div class="guidance-step">Passo 01</div>
+          <div class="guidance-title">Comece pela estrutura</div>
+          <div class="guidance-text">
+            Consulte o Organograma para validar liderança, escopo, interfaces e
+            distribuição formal do time antes de navegar pelas rotinas operacionais.
           </div>
-          <span class="app-arrow">→</span>
+        </div>
+
+        <div class="guidance-item">
+          <div class="guidance-step">Passo 02</div>
+          <div class="guidance-title">Execute o ritual diário</div>
+          <div class="guidance-text">
+            Utilize o Ritual de Gestão como ponto central de acompanhamento da operação,
+            atualização dos indicadores e leitura do status consolidado do dia.
+          </div>
+        </div>
+
+        <div class="guidance-item">
+          <div class="guidance-step">Passo 03</div>
+          <div class="guidance-title">Use utilitários com critério</div>
+          <div class="guidance-text">
+            Ferramentas auxiliares devem apoiar a execução, sem substituir definição
+            clara de responsabilidade, governança ou tomada de decisão.
+          </div>
         </div>
       </div>
-    </a>
+    </section> -->
+  </main>
 
-  </div>
-
-  <!-- INFO STRIP -->
-  <div class="info-strip">
-    <div class="info-stat">
-      <span class="info-stat-val">17</span>
-      <span class="info-stat-lbl">Colaboradores</span>
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-left">
+      ADM · GBS South America · Revenue Enablement · P2C Tower
     </div>
-    <div class="info-divider"></div>
-    <div class="info-stat">
-      <span class="info-stat-val">6</span>
-      <span class="info-stat-lbl">Pilares P2C</span>
+    <div class="footer-right">
+      cognoscit.github.io/revenue_enablement
     </div>
-    <div class="info-divider"></div>
-    <div class="info-stat">
-      <span class="info-stat-val">37+</span>
-      <span class="info-stat-lbl">Recorrentes</span>
-    </div>
-    <div class="info-divider"></div>
-    <div class="info-stat">
-      <span class="info-stat-val">~4.6k</span>
-      <span class="info-stat-lbl">Pedidos / mês</span>
-    </div>
-    <div class="info-divider"></div>
-    <div class="info-stat">
-      <span class="info-stat-val">7</span>
-      <span class="info-stat-lbl">Plantas centralizadas</span>
-    </div>
-  </div>
-
-</main>
-
-<!-- FOOTER -->
-<footer class="footer">
-  <div class="footer-left">
-    ADM · GBS South America · Revenue Enablement · P2C Tower
-  </div>
-  <div class="footer-right">
-    cognoscit.github.io/revenue_enablement
-  </div>
-</footer>
+  </footer>
 
 </body>
 </html>
