@@ -4378,7 +4378,7 @@ function renderHolidays() {
   Object.entries(catCounts).forEach(([c,n]) => {
     const m = CAT_META[c] || { label:c, icon:'📅', color:'#6b7280' };
     html += '<div style="padding:7px 14px;border-radius:var(--radius);background:' + m.color + '10;border:1px solid ' + m.color + '30;font-size:12px">'
-      + m.icon + ' <strong style="color:' + m.color + '">' + n + '</strong> <span style="color:var(--text-muted)">' + m.label + (n>1?'s':'') + '</span></div>';
+      + m.icon + ' <strong style="color:' + m.color + '">' + n + '</strong> <span style="color:var(--text-muted)">' + (n>1 && c!=='ferias' ? m.label+'s' : m.label) + '</span></div>';
   });
   html += '</div>';
 
