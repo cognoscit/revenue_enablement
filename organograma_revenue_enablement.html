@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Organograma — Revenue Enablement</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy: #002060;
+    --navy-mid: #012169;
+    --green: #00AD50;
+    --gray-100: #f5f5f3;
+    --gray-200: #e8e7e3;
+    --gray-300: #d4d3cf;
+    --gray-400: #9a9990;
+    --gray-600: #5a5955;
+    --gray-800: #2a2928;
+    --white: #ffffff;
+    --pillar-1: #0077B6;
+    --pillar-2: #7B2D8B;
+    --pillar-3: #C9770D;
+    --pillar-4: #0A7D5A;
+    --pillar-5: #C05020;
+    --pillar-6: #3A3AC8;
+    --connector: #c8c7c3;
+    --card-radius: 6px;
+  }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--gray-100);
+    color: var(--gray-800);
+    min-height: 100vh;
+    padding: 40px 24px 60px;
+  }
+
+  header { text-align: center; margin-bottom: 44px; }
+  .org-title {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--gray-400); margin-bottom: 6px;
+  }
+  .org-name { font-size: 22px; font-weight: 600; color: var(--navy); letter-spacing: -0.02em; }
+  .org-meta { font-size: 11px; color: var(--gray-400); margin-top: 4px; font-family: 'IBM Plex Mono', monospace; }
+
+  .tree { display: flex; flex-direction: column; align-items: center; }
+
+  .card {
+    background: var(--white);
+    border-radius: var(--card-radius);
+    border: 1px solid var(--gray-200);
+    padding: 11px 18px;
+    text-align: center;
+  }
+  .card .badge {
+    font-size: 9px; font-weight: 500; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--gray-400); margin-bottom: 3px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .card .name { font-size: 13px; font-weight: 600; color: var(--gray-800); line-height: 1.3; }
+  .card .sub  { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+
+  .card-thales     { width: 220px; border-top: 3px solid var(--navy-mid); }
+  .card-supervisor { width: 260px; border-top: 3px solid var(--green); background: #fafffe; }
+  .card-supervisor .name { color: var(--navy); font-size: 14px; }
+
+  .vline { width: 1px; background: var(--connector); margin: 0 auto; }
+
+  .pillars {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .pillar-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 178px;
+  }
+
+  .pillar-header {
+    width: 100%;
+    border-radius: var(--card-radius) var(--card-radius) 0 0;
+    padding: 9px 12px;
+    text-align: center;
+    color: var(--white);
+  }
+  .pillar-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; line-height: 1.3; }
+  .pillar-count { font-size: 9px; opacity: 0.7; margin-top: 2px; font-family: 'IBM Plex Mono', monospace; }
+
+  .lead-row {
+    width: 100%;
+    border-left: 1px solid var(--gray-200);
+    border-right: 1px solid var(--gray-200);
+    background: #f7f7fb;
+    padding: 8px 12px 8px 14px;
+    position: relative;
+    border-bottom: 1px dashed var(--gray-300);
+  }
+  .lead-row::before {
+    content: 'LÍDER TÉCNICO';
+    display: block;
+    font-size: 8px; font-weight: 600; letter-spacing: 0.1em;
+    color: var(--gray-400); font-family: 'IBM Plex Mono', monospace; margin-bottom: 3px;
+  }
+  .lead-row::after {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0; width: 3px;
+  }
+  .lead-name { font-size: 11.5px; font-weight: 600; color: var(--gray-800); line-height: 1.3; }
+  .lead-role { font-size: 9.5px; color: var(--gray-400); font-family: 'IBM Plex Mono', monospace; }
+  .lead-scope { font-size: 8.5px; color: var(--gray-400); margin-top: 3px; font-style: italic; line-height: 1.4; }
+
+  .pillar-members {
+    width: 100%;
+    border: 1px solid var(--gray-200);
+    border-top: none;
+    border-radius: 0 0 var(--card-radius) var(--card-radius);
+    background: var(--white);
+    overflow: hidden;
+  }
+  .member-row {
+    padding: 8px 12px 8px 14px;
+    border-bottom: 1px solid var(--gray-200);
+    position: relative;
+  }
+  .member-row:last-child { border-bottom: none; }
+  .member-row::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0; width: 3px;
+  }
+  .member-name { font-size: 11.5px; font-weight: 500; color: var(--gray-800); line-height: 1.3; }
+  .member-role { font-size: 9.5px; color: var(--gray-400); margin-top: 1px; font-family: 'IBM Plex Mono', monospace; }
+
+  .p1 .pillar-header { background: var(--pillar-1); }
+  .p1 .lead-row::after, .p1 .member-row::before { background: var(--pillar-1); }
+
+  .p2 .pillar-header { background: var(--pillar-2); }
+  .p2 .lead-row::after, .p2 .member-row::before { background: var(--pillar-2); }
+
+  .p3 .pillar-header { background: var(--pillar-3); }
+  .p3 .lead-row::after, .p3 .member-row::before { background: var(--pillar-3); }
+
+  .p4 .pillar-header { background: var(--pillar-4); }
+  .p4 .lead-row::after, .p4 .member-row::before { background: var(--pillar-4); }
+
+  .p5 .pillar-header { background: var(--pillar-5); }
+  .p5 .lead-row::after, .p5 .member-row::before { background: var(--pillar-5); }
+
+  .p6 .pillar-header { background: var(--pillar-6); }
+  .p6 .lead-row::after, .p6 .member-row::before { background: var(--pillar-6); }
+
+  .legend {
+    margin-top: 32px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--gray-400); }
+
+  footer {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 10px;
+    color: var(--gray-400);
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.04em;
+  }
+  footer span { margin: 0 10px; }
+
+  @media print {
+    body { background: white; padding: 16px; }
+    header { margin-bottom: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <p class="org-title">ADM GBS South America &nbsp;·&nbsp; Prospect-to-Cash</p>
+  <h1 class="org-name">Revenue Enablement</h1>
+  <p class="org-meta">18 colaboradores &nbsp;·&nbsp; 4 líderes técnicos &nbsp;·&nbsp; 6 pilares &nbsp;·&nbsp; Ribeirão Preto, SP</p>
+</header>
+
+<div class="tree">
+
+  <div><div class="card card-thales">
+    <div class="badge">Billing Manager</div>
+    <div class="name">Thales</div>
+  </div></div>
+
+  <div class="vline" style="height:22px"></div>
+
+  <div><div class="card card-supervisor">
+    <div class="badge">Supervisor</div>
+    <div class="name">Matheus Andreazzi</div>
+    <div class="sub">Revenue Enablement</div>
+  </div></div>
+
+  <svg id="connectorSVG" style="display:block;overflow:visible;"></svg>
+
+  <div class="pillars" id="pillarsContainer">
+
+    <!-- 1. Order Release -->
+    <div class="pillar-col p1">
+      <div class="pillar-header">
+        <div class="pillar-label">Order Release</div>
+        <div class="pillar-count">3 membros</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-name">Simeia Cristina Barbosa Giatti</div>
+        <div class="lead-role">Credit Collection Analyst</div>
+      </div>
+      <div class="pillar-members">
+        <div class="member-row">
+          <div class="member-name">Paola Assis</div>
+          <div class="member-role">Administrative Analyst</div>
+        </div>
+        <div class="member-row">
+          <div class="member-name">Renata Biliato</div>
+          <div class="member-role">Administrative Assistant</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Sales Order -->
+    <div class="pillar-col p2">
+      <div class="pillar-header">
+        <div class="pillar-label">Sales Order</div>
+        <div class="pillar-count">6 membros</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-name">Graziela Cristina Ramos dos Santos</div>
+        <div class="lead-role">Administrative Analyst</div>
+        <div class="lead-scope">também líder em Credit Pre-Analysis</div>
+      </div>
+      <div class="pillar-members">
+        <div class="member-row">
+          <div class="member-name">Aline Roberta da Silva Pereira</div>
+          <div class="member-role">Administrative Analyst</div>
+        </div>
+        <div class="member-row">
+          <div class="member-name">Andreia Pereira</div>
+          <div class="member-role">Jr Administrative Analyst</div>
+        </div>
+        <div class="member-row">
+          <div class="member-name">Ana Massei</div>
+          <div class="member-role">Administrative Assistant</div>
+        </div>
+        <div class="member-row">
+          <div class="member-name">Cristiane de Oliveira Matias Faustino</div>
+          <div class="member-role">Administrative Assistant</div>
+        </div>
+        <div class="member-row">
+          <div class="member-name">Leandra Carla de Barcelos</div>
+          <div class="member-role">Administrative Assistant</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Credit Pre-Analysis -->
+    <div class="pillar-col p3">
+      <div class="pillar-header">
+        <div class="pillar-label">Credit Pre-Analysis</div>
+        <div class="pillar-count">2 membros</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-name">Graziela Cristina Ramos dos Santos</div>
+        <div class="lead-role">Administrative Analyst</div>
+        <div class="lead-scope">também líder em Sales Order</div>
+      </div>
+      <div class="pillar-members">
+        <div class="member-row">
+          <div class="member-name">Alexandre Magno do Nascimento</div>
+          <div class="member-role">Administrative Clerk</div>
+        </div>
+        <div class="member-row">
+          <div class="member-name">Patricia da Silva Scapini</div>
+          <div class="member-role">Administrative Assistant</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Customer Service -->
+    <div class="pillar-col p4">
+      <div class="pillar-header">
+        <div class="pillar-label">Customer Service</div>
+        <div class="pillar-count">3 membros</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-name">Gilberto Junior</div>
+        <div class="lead-role">Administrative Analyst</div>
+      </div>
+      <div class="pillar-members">
+        <div class="member-row">
+          <div class="member-name">Carla Araújo</div>
+          <div class="member-role">Administrative Assistant</div>
+        </div>
+        <div class="member-row">
+          <div class="member-name">Renato Silva</div>
+          <div class="member-role">Administrative Analyst</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Pre-Billing Analysis -->
+    <div class="pillar-col p5">
+      <div class="pillar-header">
+        <div class="pillar-label">Pre-Billing Analysis</div>
+        <div class="pillar-count">2 membros</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-name">Júlia Marin</div>
+        <div class="lead-role">Administrative Analyst</div>
+        <div class="lead-scope">também líder em Billing Data Intelligence</div>
+      </div>
+      <div class="pillar-members">
+        <div class="member-row">
+          <div class="member-name">Dândara Souza</div>
+          <div class="member-role">Administrative Assistant</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. Billing Data Intelligence -->
+    <div class="pillar-col p6">
+      <div class="pillar-header">
+        <div class="pillar-label">Billing Data Intelligence</div>
+        <div class="pillar-count">2 membros</div>
+      </div>
+      <div class="lead-row">
+        <div class="lead-name">Júlia Marin</div>
+        <div class="lead-role">Administrative Analyst</div>
+        <div class="lead-scope">também líder em Pre-Billing Analysis</div>
+      </div>
+      <div class="pillar-members">
+        <div class="member-row">
+          <div class="member-name">Luiz Gabriel Fernandes</div>
+          <div class="member-role">Administrative Analyst</div>
+        </div>
+        <div class="member-row">
+          <div class="member-name">Gabriel Pimenta</div>
+          <div class="member-role">Administrative Analyst</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="legend">
+    <div class="legend-item">
+      <div style="width:22px;height:8px;border-radius:2px;background:#f7f7fb;border:1px dashed #d4d3cf;"></div>
+      <span>Líder técnico</span>
+    </div>
+    <div class="legend-item">
+      <div style="width:22px;height:8px;border-radius:2px;background:white;border:1px solid #e8e7e3;"></div>
+      <span>Membro</span>
+    </div>
+    <div class="legend-item" style="font-size:9px;font-style:italic;color:#b0afa8;">
+      * líderes que atuam em mais de um pilar aparecem nas colunas correspondentes
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>ADM GBS South America</span><span>·</span>
+  <span>Revenue Enablement</span><span>·</span>
+  <span>Abril de 2026</span>
+</footer>
+
+<script>
+  function drawConnectors() {
+    const svg = document.getElementById('connectorSVG');
+    const supCard = document.querySelector('.card-supervisor');
+    const pillarsEl = document.getElementById('pillarsContainer');
+    const cols = pillarsEl.querySelectorAll('.pillar-col');
+    const bodyRect = document.body.getBoundingClientRect();
+
+    const supRect = supCard.getBoundingClientRect();
+    const supCX = supRect.left - bodyRect.left + supRect.width / 2;
+    const supBottom = supRect.bottom - bodyRect.top;
+
+    const colData = [];
+    cols.forEach(col => {
+      const r = col.getBoundingClientRect();
+      colData.push({ cx: r.left - bodyRect.left + r.width / 2, top: r.top - bodyRect.top });
+    });
+
+    const colTop = colData[0].top;
+    const svgH = Math.max(colTop - supBottom, 10);
+    const midY = svgH / 2;
+
+    svg.style.width = '100%';
+    svg.style.height = svgH + 'px';
+
+    const svgRect = svg.getBoundingClientRect();
+    const svgLeft = svgRect.left - bodyRect.left;
+    const W = svgRect.width || 1200;
+
+    svg.setAttribute('viewBox', `0 0 ${W} ${svgH}`);
+
+    const lSup  = supCX - svgLeft;
+    const lCols = colData.map(c => c.cx - svgLeft);
+    const lMin  = Math.min(...lCols);
+    const lMax  = Math.max(...lCols);
+
+    let html = '';
+    html += `<line x1="${lSup}" y1="0" x2="${lSup}" y2="${midY}" stroke="#c8c7c3" stroke-width="1"/>`;
+    html += `<line x1="${lMin}" y1="${midY}" x2="${lMax}" y2="${midY}" stroke="#c8c7c3" stroke-width="1"/>`;
+    lCols.forEach(cx => {
+      html += `<line x1="${cx}" y1="${midY}" x2="${cx}" y2="${svgH}" stroke="#c8c7c3" stroke-width="1"/>`;
+    });
+    svg.innerHTML = html;
+  }
+
+  window.addEventListener('load', () => setTimeout(drawConnectors, 120));
+  window.addEventListener('resize', drawConnectors);
+</script>
+
+</body>
+</html>
