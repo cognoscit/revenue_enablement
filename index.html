@@ -1601,15 +1601,15 @@ function renderRitual() {
   }
 
   // ── Backlog critical alert ──
-  const criticalBacklog = computeBacklog(14).filter(b=>b.aging>=3);
+  const criticalBacklog = computeBacklog(30).filter(b=>b.aging>=3);
   if(criticalBacklog.length>0){
     const worstAging = criticalBacklog.reduce((mx,b)=>b.aging>mx?b.aging:mx,0);
     const top3 = [...new Set(criticalBacklog.map(b=>getMember(b.memberId).name.split(' ')[0]))].slice(0,3).join(', ');
     html+=`<div class="backlog-alert" onclick="setView('executive')" title="Ver no Dashboard Executivo">
       <div class="backlog-alert-icon">🚨</div>
       <div class="backlog-alert-text">
-        <div class="backlog-alert-title">${criticalBacklog.length} item(s) com aging crítico (≥3 dias)</div>
-        <div class="backlog-alert-sub">Mais antigo: ${worstAging} dias · Membros: ${top3}</div>
+        <div class="backlog-alert-title">${criticalBacklog.length} item(s) com 3+ dias úteis em aberto</div>
+        <div class="backlog-alert-sub">Mais antigo: ${worstAging} dias úteis · Envolvidos: ${top3}</div>
       </div>
       <div class="backlog-alert-cta">Ver backlog →</div>
     </div>`;
@@ -2667,8 +2667,8 @@ function renderExecutive() {
     </div>
     <div class="exec-kpi" style="--kpi-color:${backlog.length===0?'var(--green)':critBacklog>0?'var(--red)':'var(--yellow)'}">
       <div class="exec-kpi-val">${backlog.length}</div>
-      <div class="exec-kpi-lbl">Backlog Total</div>
-      <div class="exec-kpi-sub">${critBacklog} com aging ≥ 3 dias</div>
+      <div class="exec-kpi-lbl">Backlog Pendente</div>
+      <div class="exec-kpi-sub">${critBacklog} com 3+ dias úteis em aberto</div>
     </div>
     <div class="exec-kpi" style="--kpi-color:var(--purple)">
       <div class="exec-kpi-val">${kToday.carriedOver}</div>
@@ -2704,11 +2704,27 @@ function renderExecutive() {
           const cls = ag >= 5 ? 'a2' : ag >= 2 ? 'a1' : 'a0';
           const color = ag >= 5 ? 'var(--red)' : ag >= 2 ? 'var(--yellow)' : 'var(--text-muted)';
           const pct = Math.min(100, (ag / 10) * 100);
-          return `<div class="aging-row">
-            <div class="aging-desc" title="${escHtml(item.description)}">${escHtml(item.description.substring(0,40))}${item.description.length>40?'...':''}</div>
-            <div style="font-size:10px;color:var(--text-muted);white-space:nowrap">${m.name.split(' ')[0]}</div>
-            <div class="aging-bar-wrap"><div class="aging-bar-fill" style="width:${pct}%;background:${color}"></div></div>
-            <div class="aging-days ${cls}">${ag}d</div>
+          const pc=getPillarColor(m.pillarId);
+          const statusBadge=item.status==='partial'
+            ?'<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(245,158,11,.15);color:var(--yellow);font-weight:600">Parcial</span>'
+            :'<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(99,102,241,.12);color:#6366f1;font-weight:600">Pendente</span>';
+          const causeTag=item.cause&&CAUSES[item.cause]
+            ?'<span style="font-size:9px;color:'+CAUSES[item.cause].color+'">'+CAUSES[item.cause].icon+'</span>'
+            :'';
+          return `<div class="aging-row" style="${ag>=5?'border-left:2px solid var(--red);padding-left:8px;':ag>=2?'border-left:2px solid var(--yellow);padding-left:8px;':''}">
+            <div style="flex:1;min-width:0">
+              <div class="aging-desc" title="${escHtml(item.description)}">${escHtml(item.description.substring(0,45))}${item.description.length>45?'...':''}</div>
+              <div style="display:flex;align-items:center;gap:5px;margin-top:2px">
+                ${statusBadge}
+                <span style="font-size:10px;color:${pc};font-weight:500">${m.name.split(' ')[0]}</span>
+                <span style="font-size:9px;color:var(--text-muted)">${fmtShort(item.dateStr)}</span>
+                ${causeTag}
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+              <div class="aging-bar-wrap"><div class="aging-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+              <div class="aging-days ${cls}" title="${ag} dias úteis pendente">${ag}d</div>
+            </div>
           </div>`;
         }).join('')
     }
@@ -2936,10 +2952,20 @@ function renderVolSummary(item) {
 
 // ── AGING: days since createdAt ──
 function agingDays(item) {
-  if (!item.createdAt) return 0;
-  const created = new Date(item.createdAt);
-  const now = new Date();
-  return Math.floor((now - created) / 86400000);
+  // Count working days since the item's date (not createdAt)
+  // item.dateStr is set by computeBacklog
+  const refStr = item.dateStr || item.createdAt?.split('T')[0];
+  if (!refStr) return 0;
+  let ref = new Date(refStr + 'T12:00:00');
+  const now = new Date(); now.setHours(12,0,0,0);
+  let days = 0;
+  const cur = new Date(ref);
+  while (cur < now) {
+    cur.setDate(cur.getDate() + 1);
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) days++; // count only weekdays
+  }
+  return days;
 }
 
 // ── DEDUPLICATION CHECK ──
@@ -2957,12 +2983,24 @@ function checkDuplicate(dateStr, desc, memberId, excludeId) {
 // ── COMPUTE: backlog items (pending older than today) ──
 function computeBacklog(n) {
   const result = [];
+  const seen = new Set(); // deduplicate: same description+member shows only oldest
   let s = today();
   for (let i = 0; i < n; i++) {
     s = prevDay(s);
-    const items = getEffectiveDels(s).filter(d=>(d.status==='pending'||d.status==='partial')&&!d._virtual&&!d._skipMarker);
+    // Skip weekends — no activity expected
+    const dow = new Date(s+'T12:00:00').getDay();
+    if (dow === 0 || dow === 6) continue;
+    const items = getEffectiveDels(s).filter(d =>
+      (d.status==='pending'||d.status==='partial') && !d._virtual && !d._skipMarker
+    );
     items.forEach(item => {
-      result.push({ ...item, dateStr: s, aging: agingDays(item) });
+      // Use memberId+description as dedup key — keep only the oldest occurrence
+      const key = (item.memberId||'') + '|' + (item.description||'').trim().toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      const withDate = { ...item, dateStr: s };
+      withDate.aging = agingDays(withDate);
+      result.push(withDate);
     });
   }
   return result.sort((a, b) => b.aging - a.aging);
