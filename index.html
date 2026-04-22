@@ -1954,6 +1954,7 @@ function renderWeekly() {
     const kpis=calcKPIs(dayStr);
     const isT=dayStr===today();
     const hasData=getEffectiveDels(dayStr).length>0;
+    const dayHoliday=getHoliday(dayStr);
     const rate=kpis.total?kpis.delivery_rate:null;
     const rateColor=rate===null?'var(--text-muted)':rate>=90?'var(--green)':rate>=70?'var(--yellow)':'var(--red)';
     const dx=d(dayStr);
@@ -2643,7 +2644,8 @@ function renderExecutive() {
   const kToday     = calcKPIs(lastWeekday(prev));
   const backlog    = computeBacklog(30);
   const causes14   = computeCauses(14);
-  const load       = computeLoad(prev);
+  const prevWd     = lastWeekday(prev);
+  const load       = computeLoad(prevWd);
   const vols14     = computeVolumes(14, null);
   const totalMembers = S.team.filter(m => m.active).length;
   const maxLoad    = Math.max(...Object.values(load).map(l => l.total), 1);
@@ -2655,7 +2657,7 @@ function renderExecutive() {
 
   let html = `<div class="sec-hd">
     <div class="sec-title">🎯 Dashboard Executivo</div>
-    <div class="sec-actions"><span style="font-size:11px;color:var(--text-muted)">Referência: ${fmtShort(prev)}</span></div>
+    <div class="sec-actions"><span style="font-size:11px;color:var(--text-muted)">Referência: ${fmtShort(prevWd)}</span></div>
   </div>`;
 
   // Top KPI cards
@@ -2786,11 +2788,11 @@ function renderExecutive() {
 
   // ── PILLAR BREAKDOWN ──
   html += `<div class="chart-card">
-    <div class="chart-title">📊 Desempenho por Pilar — ${fmtShort(prev)}</div>
+    <div class="chart-title">📊 Desempenho por Pilar — ${fmtShort(lastWeekday(prev))}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:4px;">`;
 
   S.pillars.forEach(p => {
-    const k = calcKPIs(prev, p.id, null);
+    const k = calcKPIs(lastWeekday(prev), p.id, null);
     if (!k.total) return;
     const rate = k.delivery_rate;
     const rc = rate >= 90 ? 'var(--green)' : rate >= 70 ? 'var(--yellow)' : 'var(--red)';
