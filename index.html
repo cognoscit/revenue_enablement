@@ -3098,7 +3098,23 @@ function setHoliday(dateStr, label, memberIds) {
   if (!S.holidays) S.holidays = {};
   S.holidays[dateStr] = { label: label||'Folga', memberIds: memberIds||[] };
   save(); render(); updateHolidayBadge();
-  toast('🏖 Folga definida: ' + fmtShort(dateStr), 'purple');
+}
+
+// Set holiday for a date range (inclusive, dias úteis only if requested)
+function setHolidayRange(startDate, endDate, label, memberIds, workdaysOnly) {
+  if (!S.holidays) S.holidays = {};
+  let cur = startDate;
+  let count = 0;
+  while (cur <= endDate) {
+    const dow = new Date(cur + 'T12:00:00').getDay();
+    if (!workdaysOnly || (dow >= 1 && dow <= 5)) {
+      S.holidays[cur] = { label: label||'Férias', memberIds: memberIds||[] };
+      count++;
+    }
+    cur = nextDay(cur);
+  }
+  save(); render(); updateHolidayBadge();
+  toast('🏖 ' + count + ' dia(s) de folga definidos', 'purple');
 }
 
 // Remove folga
@@ -3108,15 +3124,32 @@ function removeHoliday(dateStr) {
   toast('✓ Folga removida: ' + fmtShort(dateStr), 'green');
 }
 
-// Open the folga modal for a given date
+// Remove all holidays in a range (e.g. delete an entire vacation block)
+function removeHolidayRange(startDate, endDate) {
+  if (!S.holidays) return;
+  let cur = startDate;
+  let count = 0;
+  while (cur <= endDate) {
+    if (S.holidays[cur]) { delete S.holidays[cur]; count++; }
+    cur = nextDay(cur);
+  }
+  save(); render(); updateHolidayBadge();
+  toast('✓ ' + count + ' dia(s) de folga removidos', 'green');
+}
+
+// Open the folga modal — supports single day or date range
+
+function toggleAllFolgaChk(checked) {
+  document.querySelectorAll('.folga-mbr-chk').forEach(function(c){ c.checked = checked; });
+}
 function openFolgaModal(dateStr) {
   const existing = getHoliday(dateStr);
-  const members = S.team.filter(m => m.active);
+  const members  = S.team.filter(m => m.active);
   const allChecked = !existing || !existing.memberIds || existing.memberIds.length === 0;
 
   let memberChks = '';
-  members.forEach(m => {
-    const pc = getPillarColor(m.pillarId);
+  members.forEach(function(m) {
+    const pc      = getPillarColor(m.pillarId);
     const checked = existing ? (allChecked || existing.memberIds.includes(m.id)) : true;
     memberChks += '<label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:13px;">'
       + '<input type="checkbox" class="folga-mbr-chk" value="' + m.id + '" ' + (checked?'checked':'') + ' style="width:15px;height:15px;accent-color:#6366f1">'
@@ -3126,32 +3159,91 @@ function openFolgaModal(dateStr) {
       + '</label>';
   });
 
-  const body = '<div class="fg"><label class="flbl">Descrição da folga</label>'
-    + '<input class="fi" id="folga-label" placeholder="ex: Feriado Nacional, Recesso..." value="' + escHtml(existing ? existing.label : 'Feriado') + '"></div>'
-    + '<div style="margin:10px 0 6px;font-size:12px;font-weight:600;color:var(--text-secondary)">Quem está de folga?</div>'
+  const body = '<div class="frow" style="gap:10px;margin-bottom:10px">'
+    + '<div class="fg"><label class="flbl">Data início *</label>'
+    + '<input class="fi" id="folga-start" type="date" value="' + dateStr + '"></div>'
+    + '<div class="fg"><label class="flbl">Data fim</label>'
+    + '<input class="fi" id="folga-end" type="date" value="' + dateStr + '" oninput="updateFolgaPreview()"></div>'
+    + '</div>'
+    + '<div class="fg" style="margin-bottom:10px"><label class="flbl">Descrição</label>'
+    + '<input class="fi" id="folga-label" placeholder="ex: Feriado Nacional, Férias, Recesso..." value="' + escHtml(existing ? existing.label : 'Feriado') + '"></div>'
+    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
+    + '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">'
+    + '<input type="checkbox" id="folga-workdays-only" checked style="width:14px;height:14px;accent-color:#6366f1" oninput="updateFolgaPreview()">'
+    + '<span>Apenas dias úteis (seg–sex)</span></label>'
+    + '<span id="folga-preview" style="font-family:JetBrains Mono,monospace;font-size:11px;color:#6366f1;font-weight:600"></span>'
+    + '</div>'
+    + '<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--text-secondary)">Quem está de folga?</div>'
     + '<label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);margin-bottom:6px;">'
-    + '<input type="checkbox" id="folga-all" ' + (allChecked?'checked':'') + ' style="width:15px;height:15px;accent-color:#6366f1" onchange="document.querySelectorAll(String.fromCharCode(46)+\'folga-mbr-chk\').forEach(function(c){c.checked=document.getElementById(\'folga-all\').checked})">'
+    + '<input type="checkbox" id="folga-all" ' + (allChecked?'checked':'') + ' style="width:15px;height:15px;accent-color:#6366f1"'
+    + ' onchange="toggleAllFolgaChk(this.checked)">'
     + '<span style="font-weight:600">Todos os membros</span></label>'
-    + '<div style="max-height:240px;overflow-y:auto;">' + memberChks + '</div>';
+    + '<div style="max-height:200px;overflow-y:auto;">' + memberChks + '</div>';
 
   const rmBtn = existing
-    ? '<button class="btn btn-d btn-sm" onclick="removeHoliday(\'' + dateStr + '\');closeModal()">🗑 Remover folga</button>'
+    ? '<button class="btn btn-d btn-sm" onclick="removeHoliday(\'' + dateStr + '\');closeModal()">🗑 Remover este dia</button>'
     : '';
 
   const foot = rmBtn
     + '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
     + '<button class="btn btn-p" onclick="saveFolgaModal(\'' + dateStr + '\')">✓ Salvar</button>';
 
-  openModal({ title: '🏖 Folga — ' + fmtShort(dateStr), body, foot });
+  openModal({ title: '🏖 Folga / Feriado', body, foot, size: 'md' });
+
+  // Trigger preview update after modal renders
+  setTimeout(updateFolgaPreview, 50);
 }
+
+// Count working days between two dates
+function countWorkdays(start, end, workdaysOnly) {
+  let cur = start, count = 0;
+  while (cur <= end) {
+    const dow = new Date(cur + 'T12:00:00').getDay();
+    if (!workdaysOnly || (dow >= 1 && dow <= 5)) count++;
+    cur = nextDay(cur);
+  }
+  return count;
+}
+
+// Live preview of how many days will be set
+function updateFolgaPreview() {
+  const s   = document.getElementById('folga-start');
+  const e   = document.getElementById('folga-end');
+  const wdo = document.getElementById('folga-workdays-only');
+  const prv = document.getElementById('folga-preview');
+  if (!s || !e || !prv) return;
+  const startVal = s.value, endVal = e.value;
+  if (!startVal || !endVal || startVal > endVal) { prv.textContent = ''; return; }
+  const workOnly = wdo ? wdo.checked : true;
+  const n = countWorkdays(startVal, endVal, workOnly);
+  if (n <= 1) { prv.textContent = ''; return; }
+  prv.textContent = n + ' dias selecionados';
+}
+
 function saveFolgaModal(dateStr) {
-  const label = document.getElementById('folga-label')?.value.trim() || 'Feriado';
-  const allChk = document.getElementById('folga-all');
+  const startEl = document.getElementById('folga-start');
+  const endEl   = document.getElementById('folga-end');
+  const label   = (document.getElementById('folga-label')?.value || '').trim() || 'Feriado';
+  const wdoEl   = document.getElementById('folga-workdays-only');
+  const allChk  = document.getElementById('folga-all');
+
+  const startDate = startEl?.value || dateStr;
+  const endDate   = endEl?.value   || dateStr;
+  const workdaysOnly = wdoEl ? wdoEl.checked : true;
+
   let memberIds = [];
   if (!allChk?.checked) {
-    document.querySelectorAll('.folga-mbr-chk:checked').forEach(c => memberIds.push(c.value));
+    document.querySelectorAll('.folga-mbr-chk:checked').forEach(function(c){ memberIds.push(c.value); });
   }
-  setHoliday(dateStr, label, memberIds);
+
+  if (startDate === endDate) {
+    // Single day
+    setHoliday(startDate, label, memberIds);
+    toast('🏖 Folga definida: ' + fmtShort(startDate), 'purple');
+  } else {
+    // Range
+    setHolidayRange(startDate, endDate, label, memberIds, workdaysOnly);
+  }
   closeModal();
   if (view === 'holidays') renderHolidays();
   updateHolidayBadge();
