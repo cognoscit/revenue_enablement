@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Organograma — Revenue Enablement</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
@@ -37,12 +37,12 @@
     background: var(--gray-100);
     color: var(--gray-800);
     min-height: 100vh;
-    padding: 40px 24px 60px;
+    padding: 32px 18px 48px;
   }
 
   header {
     text-align: center;
-    margin-bottom: 44px;
+    margin-bottom: 36px;
   }
 
   .org-title {
@@ -78,17 +78,18 @@
     background: var(--white);
     border-radius: var(--card-radius);
     border: 1px solid var(--gray-200);
-    padding: 11px 18px;
+    padding: 10px 16px;
     text-align: center;
+    box-shadow: 0 1px 0 rgba(0,0,0,.02);
   }
 
   .card .badge {
-    font-size: 9px;
+    font-size: 8px;
     font-weight: 500;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--gray-400);
-    margin-bottom: 3px;
+    margin-bottom: 4px;
     font-family: 'IBM Plex Mono', monospace;
   }
 
@@ -96,11 +97,11 @@
     font-size: 13px;
     font-weight: 600;
     color: var(--gray-800);
-    line-height: 1.3;
+    line-height: 1.25;
   }
 
   .card .sub {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--gray-400);
     margin-top: 2px;
   }
@@ -111,7 +112,7 @@
   }
 
   .card-supervisor {
-    width: 260px;
+    width: 250px;
     border-top: 3px solid var(--green);
     background: #fafffe;
   }
@@ -127,8 +128,7 @@
     margin: 0 auto;
   }
 
-  #topConnectorSVG,
-  #leaderConnectorSVG {
+  #topConnectorSVG {
     display: block;
     overflow: visible;
     width: 100%;
@@ -136,37 +136,58 @@
 
   .leaders-row {
     width: 100%;
-    max-width: 1320px;
+    max-width: 1260px;
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    gap: 18px;
+    gap: 10px;
     flex-wrap: nowrap;
   }
 
   .leader-cluster {
-    width: 300px;
     display: flex;
     flex-direction: column;
     align-items: center;
+    min-width: 0;
+  }
+
+  .leader-cluster.single-cluster {
+    width: 205px;
+  }
+
+  .leader-cluster.double-cluster {
+    width: 315px;
   }
 
   .leader-card {
-    width: 240px;
+    width: 205px;
     border-top: 3px solid var(--gray-600);
     background: #f6f7f9;
+    padding: 10px 12px;
   }
 
   .leader-card .name {
     color: var(--navy);
-    font-size: 13px;
+    font-size: 12px;
+    line-height: 1.22;
+  }
+
+  .leader-card .sub {
+    font-size: 9.5px;
+  }
+
+  .cluster-svg {
+    display: block;
+    overflow: visible;
+    width: 100%;
+    height: 20px;
   }
 
   .cluster-pillars {
-    margin-top: 22px;
+    margin-top: 14px;
     width: 100%;
     display: flex;
-    gap: 12px;
+    gap: 8px;
     justify-content: center;
     align-items: flex-start;
   }
@@ -179,31 +200,35 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 144px;
+    min-width: 0;
   }
 
-  .pillar-col.double {
-    width: 144px;
+  .single-cluster .pillar-col {
+    width: 150px;
+  }
+
+  .double-cluster .pillar-col {
+    width: 152px;
   }
 
   .pillar-header {
     width: 100%;
     border-radius: var(--card-radius) var(--card-radius) 0 0;
-    padding: 9px 10px;
+    padding: 8px 7px;
     text-align: center;
     color: var(--white);
   }
 
   .pillar-label {
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.03em;
-    line-height: 1.3;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
   }
 
   .pillar-count {
-    font-size: 9px;
-    opacity: 0.75;
+    font-size: 8px;
+    opacity: 0.76;
     margin-top: 2px;
     font-family: 'IBM Plex Mono', monospace;
   }
@@ -218,13 +243,15 @@
   }
 
   .member-row {
-    padding: 8px 10px 8px 12px;
+    padding: 7px 8px 7px 10px;
     border-bottom: 1px solid var(--gray-200);
     position: relative;
-    min-height: 52px;
+    min-height: 44px;
   }
 
-  .member-row:last-child { border-bottom: none; }
+  .member-row:last-child {
+    border-bottom: none;
+  }
 
   .member-row::before {
     content: '';
@@ -236,18 +263,18 @@
   }
 
   .member-name {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 500;
     color: var(--gray-800);
-    line-height: 1.3;
+    line-height: 1.22;
   }
 
   .member-role {
-    font-size: 9px;
+    font-size: 8.3px;
     color: var(--gray-400);
     margin-top: 2px;
     font-family: 'IBM Plex Mono', monospace;
-    line-height: 1.35;
+    line-height: 1.25;
   }
 
   .p1 .pillar-header { background: var(--pillar-1); }
@@ -269,11 +296,11 @@
   .p6 .member-row::before { background: var(--pillar-6); }
 
   .legend {
-    margin-top: 32px;
+    margin-top: 28px;
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 24px;
+    gap: 20px;
     flex-wrap: wrap;
   }
 
@@ -286,7 +313,7 @@
   }
 
   footer {
-    margin-top: 20px;
+    margin-top: 18px;
     text-align: center;
     font-size: 10px;
     color: var(--gray-400);
@@ -296,14 +323,20 @@
 
   footer span { margin: 0 10px; }
 
-  @media (max-width: 1280px) {
+  @media (max-width: 1220px) {
     .leaders-row {
       flex-wrap: wrap;
-      gap: 26px;
+      gap: 22px;
     }
 
-    .leader-cluster {
-      width: 340px;
+    .leader-cluster.single-cluster,
+    .leader-cluster.double-cluster {
+      width: 320px;
+    }
+
+    .double-cluster .pillar-col,
+    .single-cluster .pillar-col {
+      width: 154px;
     }
   }
 
@@ -330,7 +363,7 @@
     </div>
   </div>
 
-  <div class="vline" style="height:22px"></div>
+  <div class="vline" style="height:18px"></div>
 
   <div>
     <div class="card card-supervisor" id="supervisorCard">
@@ -345,14 +378,14 @@
   <div class="leaders-row" id="leadersRow">
 
     <!-- SIMEIA -->
-    <div class="leader-cluster">
+    <div class="leader-cluster single-cluster">
       <div class="card leader-card">
         <div class="badge">Líder Técnico</div>
         <div class="name">Simeia Cristina Barbosa Giatti</div>
         <div class="sub">Analista Pleno</div>
       </div>
 
-      <svg class="cluster-svg" style="display:block;overflow:visible;width:100%;height:22px;"></svg>
+      <svg class="cluster-svg"></svg>
 
       <div class="cluster-pillars single">
         <div class="pillar-col p1">
@@ -375,17 +408,17 @@
     </div>
 
     <!-- GRAZIELA -->
-    <div class="leader-cluster">
+    <div class="leader-cluster double-cluster">
       <div class="card leader-card">
         <div class="badge">Líder Técnico</div>
         <div class="name">Graziela Cristina Ramos dos Santos</div>
         <div class="sub">Analista Pleno</div>
       </div>
 
-      <svg class="cluster-svg" style="display:block;overflow:visible;width:100%;height:22px;"></svg>
+      <svg class="cluster-svg"></svg>
 
       <div class="cluster-pillars">
-        <div class="pillar-col p2 double">
+        <div class="pillar-col p2">
           <div class="pillar-header">
             <div class="pillar-label">Sales Order</div>
             <div class="pillar-count">5 membros</div>
@@ -414,7 +447,7 @@
           </div>
         </div>
 
-        <div class="pillar-col p3 double">
+        <div class="pillar-col p3">
           <div class="pillar-header">
             <div class="pillar-label">Credit Due Dilligence</div>
             <div class="pillar-count">2 membros</div>
@@ -434,14 +467,14 @@
     </div>
 
     <!-- GILBERTO -->
-    <div class="leader-cluster">
+    <div class="leader-cluster single-cluster">
       <div class="card leader-card">
         <div class="badge">Líder Técnico</div>
         <div class="name">Gilberto Junior</div>
         <div class="sub">Analista Sênior</div>
       </div>
 
-      <svg class="cluster-svg" style="display:block;overflow:visible;width:100%;height:22px;"></svg>
+      <svg class="cluster-svg"></svg>
 
       <div class="cluster-pillars single">
         <div class="pillar-col p4">
@@ -464,17 +497,17 @@
     </div>
 
     <!-- JULIA -->
-    <div class="leader-cluster">
+    <div class="leader-cluster double-cluster">
       <div class="card leader-card">
         <div class="badge">Líder Técnico</div>
         <div class="name">Júlia Marin</div>
         <div class="sub">Analista Sênior</div>
       </div>
 
-      <svg class="cluster-svg" style="display:block;overflow:visible;width:100%;height:22px;"></svg>
+      <svg class="cluster-svg"></svg>
 
       <div class="cluster-pillars">
-        <div class="pillar-col p5 double">
+        <div class="pillar-col p5">
           <div class="pillar-header">
             <div class="pillar-label">Pre-Billing Analysis</div>
             <div class="pillar-count">1 membro</div>
@@ -487,7 +520,7 @@
           </div>
         </div>
 
-        <div class="pillar-col p6 double">
+        <div class="pillar-col p6">
           <div class="pillar-header">
             <div class="pillar-label">Billing Data Intelligence</div>
             <div class="pillar-count">2 membros</div>
@@ -518,7 +551,7 @@
       <span>Operadores do pilar</span>
     </div>
     <div class="legend-item" style="font-size:9px;font-style:italic;color:#b0afa8;">
-      * hierarquia prevalece; pilares são subordinados à camada intermediária de liderança
+      * hierarquia prevalece; pilares subordinados à liderança técnica
     </div>
   </div>
 
@@ -535,7 +568,7 @@
     const svg = document.getElementById('topConnectorSVG');
     const supCard = document.getElementById('supervisorCard');
     const leadersRow = document.getElementById('leadersRow');
-    const leaderClusters = leadersRow.querySelectorAll('.leader-cluster');
+    const clusters = leadersRow.querySelectorAll('.leader-cluster');
     const bodyRect = document.body.getBoundingClientRect();
 
     const supRect = supCard.getBoundingClientRect();
@@ -543,7 +576,7 @@
     const supBottom = supRect.bottom - bodyRect.top;
 
     const clusterData = [];
-    leaderClusters.forEach(cluster => {
+    clusters.forEach(cluster => {
       const r = cluster.getBoundingClientRect();
       clusterData.push({
         cx: r.left - bodyRect.left + r.width / 2,
@@ -606,7 +639,7 @@
       });
 
       const top = Math.min(...pillarData.map(p => p.top));
-      const svgH = Math.max(top - leaderBottom, 12);
+      const svgH = Math.max(top - leaderBottom, 10);
       const midY = svgH / 2;
 
       svg.style.height = svgH + 'px';
