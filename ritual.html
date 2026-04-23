@@ -662,6 +662,10 @@ body {
     <div class="nav-item" data-view="weekly">
       <span class="nav-icon">📅</span><span>Visão Semanal</span>
     </div>
+    <div class="nav-item" data-view="longterm">
+      <span class="nav-icon">🎯</span><span>Longo Prazo</span>
+      <span class="nav-badge hidden" id="lt-badge">0</span>
+    </div>
     <div class="nav-label" style="margin-top:8px">Análise</div>
     <div class="nav-item" data-view="executive">
       <span class="nav-icon">🎯</span><span>Dashboard Executivo</span>
@@ -1391,7 +1395,7 @@ function genId() { return '_'+Math.random().toString(36).substr(2,9); }
 function ensureDay(s) { if(!S.days[s]) S.days[s]={deliverables:[],notes:''}; if(!S.days[s].deliverables) S.days[s].deliverables=[]; if(S.days[s].notes===undefined) S.days[s].notes=''; }
 
 function addDel(dateStr, data) { ensureDay(dateStr); S.days[dateStr].deliverables.push({id:genId(),createdAt:new Date().toISOString(),status:'pending',notes:'',blocker:false,...data}); save(); render(); }
-function updDel(dateStr, id, updates) { ensureDay(dateStr); const idx=S.days[dateStr].deliverables.findIndex(d=>d.id===id); if(idx!==-1){S.days[dateStr].deliverables[idx]={...S.days[dateStr].deliverables[idx],...updates}; save(); render();} }
+function updDel(dateStr, id, updates) { ensureDay(dateStr); const idx=S.days[dateStr].deliverables.findIndex(d=>d.id===id); if(idx!==-1){S.days[dateStr].deliverables[idx]={...S.days[dateStr].deliverables[idx],...updates}; save(); render(); updateLtBadge();} }
 function delDel(dateStr, id) { if(!S.days[dateStr]) return; S.days[dateStr].deliverables=S.days[dateStr].deliverables.filter(d=>d.id!==id); save(); render(); }
 
 function cycleStatus(dateStr, id) {
@@ -1493,6 +1497,7 @@ function applyTemplates(dateStr) {
 // ═══════════════════════════════════════════════════
 function renderSidebar() {
   updateHolidayBadge();
+  updateLtBadge();
   const wrap=document.getElementById('sidebar-team'); if(!wrap) return;
   let html='<div class="sidebar-team-label">Membros do Time</div>';
   S.team.filter(m=>m.active).forEach(m=>{
@@ -3282,39 +3287,73 @@ function typeBadge(item){
 function ltChip(item){if((item.type||'daily')!=='longterm'||!item.dueDate)return '';const dr=daysRemaining(item.dueDate);if(dr===null)return '';const cls=dr<0?'over':dr<=3?'warn':'ok';const lbl=dr<0?`${Math.abs(dr)}d atraso`:dr===0?'Vence hoje':`${dr}d restantes`;return `<span class="lt-chip ${cls}" title="${item.dueDate}">🎯 ${lbl}</span>`;}
 function ltBar(item){
   if((item.type||'daily')!=='longterm') return '';
-  const progress=item.progress||0;
+  const progress = item.progress || 0;
+  const status   = item.status || 'pending';
 
-  // Time-based auto calculation
-  let timePct=null, scheduleChip='', overrun=false;
+  // ── Item concluído ──
+  if(status === 'done'){
+    const early = item.dueDate && (item.dueDate > (item.updatedAt||item.createdAt||'').split('T')[0]);
+    // Calculate days delivered early if possible
+    let earlyMsg = '';
+    if(item.dueDate){
+      const due  = new Date(item.dueDate+'T00:00:00');
+      const now  = new Date(); now.setHours(0,0,0,0);
+      const diff = Math.round((due - now)/86400000);
+      if(diff > 0) earlyMsg = ' · ' + diff + 'd antes do prazo';
+    }
+    return '<div style="margin-top:4px">'
+      + '<span class="lt-schedule-chip lt-on-track">✓ Entregue' + earlyMsg + '</span>'
+      + '<div class="lt-progress" title="100% concluído"><div class="lt-progress-fill" style="width:100%;background:var(--green)"></div></div>'
+      + '</div>';
+  }
+
+  // ── Item cancelado ──
+  if(status === 'cancelled'){
+    return '<div style="margin-top:4px">'
+      + '<span class="lt-schedule-chip" style="color:var(--text-muted);border-color:var(--border);background:var(--bg-hover)">✕ Cancelado</span>'
+      + '</div>';
+  }
+
+  // ── Em andamento ──
+  let timePct = null, scheduleChip = '', overrun = false;
   if(item.startDate && item.dueDate){
-    const start=new Date(item.startDate+'T00:00:00');
-    const due=new Date(item.dueDate+'T00:00:00');
-    const now=new Date(); now.setHours(0,0,0,0);
-    const totalDays=Math.max(1,(due-start)/86400000);
-    const elapsed=Math.max(0,(now-start)/86400000);
-    timePct=Math.min(100,Math.round((elapsed/totalDays)*100));
-    overrun = timePct >= 100 && progress < 100;
-    // Compare time consumed vs progress
-    const gap=timePct-progress;
-    if(overrun || gap>=20){
-      scheduleChip=`<span class="lt-schedule-chip lt-delayed">⚠ ${timePct}% tempo · ${progress}% feito</span>`;
-    } else if(gap>=10){
-      scheduleChip=`<span class="lt-schedule-chip lt-at-risk">⏱ ${timePct}% tempo · ${progress}% feito</span>`;
+    const start    = new Date(item.startDate+'T00:00:00');
+    const due      = new Date(item.dueDate+'T00:00:00');
+    const now      = new Date(); now.setHours(0,0,0,0);
+    const totalDays = Math.max(1, (due-start)/86400000);
+    const elapsed   = Math.max(0, (now-start)/86400000);
+    timePct  = Math.min(100, Math.round((elapsed/totalDays)*100));
+    overrun  = timePct >= 100 && progress < 100;
+    const gap = timePct - progress;
+    const remaining = Math.max(0, Math.round((due-now)/86400000));
+    if(overrun || gap >= 20){
+      scheduleChip = '<span class="lt-schedule-chip lt-delayed">⚠ ' + timePct + '% tempo · ' + progress + '% feito</span>';
+    } else if(gap >= 10){
+      scheduleChip = '<span class="lt-schedule-chip lt-at-risk">⏱ ' + timePct + '% tempo · ' + progress + '% feito</span>';
     } else {
-      scheduleChip=`<span class="lt-schedule-chip lt-on-track">✓ ${progress}% · ${Math.max(0,Math.round(item.dueDate?(new Date(item.dueDate+'T00:00:00')-new Date())/86400000:0))}d restantes</span>`;
+      scheduleChip = '<span class="lt-schedule-chip lt-on-track">✓ ' + progress + '% · ' + remaining + 'd restantes</span>';
+    }
+  } else if(item.dueDate){
+    const due = new Date(item.dueDate+'T00:00:00');
+    const now = new Date(); now.setHours(0,0,0,0);
+    const remaining = Math.round((due-now)/86400000);
+    if(remaining < 0){
+      scheduleChip = '<span class="lt-schedule-chip lt-delayed">⚠ ' + Math.abs(remaining) + 'd em atraso</span>';
+    } else if(remaining <= 2){
+      scheduleChip = '<span class="lt-schedule-chip lt-at-risk">⏱ Vence em ' + remaining + 'd</span>';
+    } else {
+      scheduleChip = '<span class="lt-schedule-chip lt-on-track">' + remaining + 'd restantes</span>';
     }
   }
 
-  const mColor=progress>80?'var(--green)':progress>40?'var(--yellow)':'var(--red)';
-  let out=`<div style="margin-top:4px">`;
-  if(scheduleChip) out+=`<div style="margin-bottom:3px">${scheduleChip}</div>`;
-  // Manual progress bar
-  out+=`<div class="lt-progress" title="${progress}% concluído"><div class="lt-progress-fill" style="width:${progress}%;background:${mColor}"></div></div>`;
-  // Time bar (if available)
-  if(timePct!==null){
-    out+=`<div class="lt-time-bar" title="${timePct}% do prazo consumido"><div class="lt-time-fill ${overrun?'lt-time-overrun':''}" style="width:${timePct}%"></div></div>`;
+  const mColor = progress > 80 ? 'var(--green)' : progress > 40 ? 'var(--yellow)' : 'var(--red)';
+  let out = '<div style="margin-top:4px">';
+  if(scheduleChip) out += '<div style="margin-bottom:3px">' + scheduleChip + '</div>';
+  out += '<div class="lt-progress" title="' + progress + '% concluído"><div class="lt-progress-fill" style="width:' + progress + '%;background:' + mColor + '"></div></div>';
+  if(timePct !== null){
+    out += '<div class="lt-time-bar" title="' + timePct + '% do prazo consumido"><div class="lt-time-fill ' + (overrun?'lt-time-overrun':'') + '" style="width:' + timePct + '%"></div></div>';
   }
-  out+=`</div>`;
+  out += '</div>';
   return out;
 }
 // ── DELIVERABLE MODAL ──
@@ -4255,7 +4294,7 @@ function quickAddForMember(id){openBatchAdd(date,id);}
 // ═══════════════════════════════════════════════════
 // MAIN RENDER
 // ═══════════════════════════════════════════════════
-const TITLES={ritual:'⚡ Ritual Matinal',holidays:'🏖 Folgas & Feriados',executive:'🎯 Dashboard Executivo',weekly:'📅 Visão Semanal',metrics:'📊 KPIs & Métricas',team:'👥 Time & Pilares',history:'📋 Histórico',templates:'🔁 Templates',recurring:'↻ Recorrentes',kpis:'⚙️ Config. KPIs',settings:'🔧 Configurações'};
+const TITLES={ritual:'⚡ Ritual Matinal',longterm:'🎯 Entregas de Longo Prazo',holidays:'🏖 Folgas & Feriados',executive:'🎯 Dashboard Executivo',weekly:'📅 Visão Semanal',metrics:'📊 KPIs & Métricas',team:'👥 Time & Pilares',history:'📋 Histórico',templates:'🔁 Templates',recurring:'↻ Recorrentes',kpis:'⚙️ Config. KPIs',settings:'🔧 Configurações'};
 
 
 // ═══════════════════════════════════════════════════
@@ -4451,6 +4490,192 @@ function confirmRemoveHoliday(dateStr) {
     foot: footHtml
   });
 }
+
+// ═══════════════════════════════════════════════════
+// RENDER: LONGO PRAZO
+// ═══════════════════════════════════════════════════
+function getAllLongterm() {
+  const items = [];
+  const seen  = new Set();
+  Object.entries(S.days||{}).forEach(function([ds, day]) {
+    (day.deliverables||[]).forEach(function(item) {
+      if ((item.type||'daily') !== 'longterm') return;
+      if (item._skipMarker) return;
+      if (seen.has(item.id)) return;
+      seen.add(item.id);
+      items.push(Object.assign({}, item, { dateStr: ds }));
+    });
+  });
+  return items;
+}
+
+function updateLtBadge() {
+  const b = document.getElementById('lt-badge');
+  if (!b) return;
+  const active = getAllLongterm().filter(function(i) {
+    return i.status !== 'done' && i.status !== 'cancelled';
+  }).length;
+  if (active > 0) { b.textContent = active; b.classList.remove('hidden'); }
+  else b.classList.add('hidden');
+}
+
+function renderLongterm() {
+  destroyCharts();
+  const all    = getAllLongterm();
+  const today_ = today();
+
+  // Categorize
+  const active    = all.filter(i => i.status !== 'done' && i.status !== 'cancelled');
+  const done_list = all.filter(i => i.status === 'done');
+  const cancelled = all.filter(i => i.status === 'cancelled');
+
+  // Sort active: overdue first, then by dueDate
+  active.sort(function(a,b) {
+    const ra = a.dueDate||'9999', rb = b.dueDate||'9999';
+    return ra.localeCompare(rb);
+  });
+
+  let html = '<div class="sec-hd">'
+    + '<div class="sec-title">🎯 Entregas de Longo Prazo</div>'
+    + '<div class="sec-actions">'
+    + '<button class="btn btn-p btn-sm" onclick="openAddDel(today())">+ Nova</button>'
+    + '</div></div>';
+
+  // Summary chips
+  const overdue  = active.filter(i => i.dueDate && i.dueDate < today_).length;
+  const on_track = active.filter(i => !i.dueDate || i.dueDate >= today_).length;
+  html += '<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">';
+  if (active.length)    html += '<div style="padding:7px 14px;border-radius:var(--radius);background:var(--bg-card);border:1px solid var(--border);font-size:12px"><strong style="color:var(--accent)">' + active.length + '</strong> <span style="color:var(--text-muted)">em andamento</span></div>';
+  if (overdue)          html += '<div style="padding:7px 14px;border-radius:var(--radius);background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.25);font-size:12px"><strong style="color:var(--red)">' + overdue + '</strong> <span style="color:var(--text-muted)">em atraso</span></div>';
+  if (done_list.length) html += '<div style="padding:7px 14px;border-radius:var(--radius);background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.25);font-size:12px"><strong style="color:var(--green)">' + done_list.length + '</strong> <span style="color:var(--text-muted)">concluídas</span></div>';
+  html += '</div>';
+
+  if (!all.length) {
+    html += '<div class="empty"><div class="empty-icon">🎯</div><div class="empty-text">Nenhuma entrega de longo prazo cadastrada</div></div>';
+    document.getElementById('content').innerHTML = html;
+    return;
+  }
+
+  function buildLtCard(item) {
+    const m  = getMember(item.memberId);
+    const pc = getPillarColor(m.pillarId);
+    const st = item.status || 'pending';
+    const progress = item.progress || 0;
+
+    // Status badge
+    const statusMap = { done:'✓ Concluída', partial:'⚠ Parcial', missed:'✗ Não entregue', pending:'⏳ Em andamento', cancelled:'✕ Cancelada' };
+    const statusColor = { done:'var(--green)', partial:'var(--yellow)', missed:'var(--red)', pending:'var(--text-muted)', cancelled:'var(--text-muted)' };
+
+    // Due date chip
+    let dueChip = '';
+    if (item.dueDate) {
+      const due  = new Date(item.dueDate+'T00:00:00');
+      const now  = new Date(); now.setHours(0,0,0,0);
+      const diff = Math.round((due-now)/86400000);
+      if (st === 'done') {
+        // Show how many days before/after due date it was completed
+        const completedOn = (item.updatedAt||item.createdAt||'').split('T')[0] || today_;
+        const completedDate = new Date(completedOn+'T00:00:00');
+        const earlyDays = Math.round((due-completedDate)/86400000);
+        dueChip = earlyDays > 0
+          ? '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(16,185,129,.1);color:var(--green);font-family:JetBrains Mono,monospace">' + earlyDays + 'd antes do prazo</span>'
+          : earlyDays < 0
+            ? '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,.1);color:var(--red);font-family:JetBrains Mono,monospace">' + Math.abs(earlyDays) + 'd após o prazo</span>'
+            : '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(16,185,129,.1);color:var(--green);font-family:JetBrains Mono,monospace">No prazo</span>';
+      } else if (diff < 0) {
+        dueChip = '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,.1);color:var(--red);font-weight:700;font-family:JetBrains Mono,monospace">⚠ ' + Math.abs(diff) + 'd em atraso</span>';
+      } else if (diff <= 2) {
+        dueChip = '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(245,158,11,.1);color:var(--yellow);font-weight:700;font-family:JetBrains Mono,monospace">⏱ Vence em ' + diff + 'd</span>';
+      } else {
+        dueChip = '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:var(--bg-hover);color:var(--text-muted);font-family:JetBrains Mono,monospace">' + diff + 'd restantes</span>';
+      }
+    }
+
+    // Progress bar
+    const pColor = st === 'done' ? 'var(--green)' : progress > 80 ? 'var(--green)' : progress > 40 ? 'var(--yellow)' : 'var(--red)';
+    const pct    = st === 'done' ? 100 : progress;
+
+    // Time consumed bar
+    let timePct = null;
+    if (item.startDate && item.dueDate && st !== 'done') {
+      const start = new Date(item.startDate+'T00:00:00');
+      const due2  = new Date(item.dueDate+'T00:00:00');
+      const now2  = new Date(); now2.setHours(0,0,0,0);
+      timePct = Math.min(100, Math.round(((now2-start)/(due2-start))*100));
+    }
+
+    // Progress slider (only for active)
+    const sliderHtml = (st !== 'done' && st !== 'cancelled')
+      ? '<div style="margin-top:10px;display:flex;align-items:center;gap:10px">'
+        + '<input type="range" min="0" max="100" value="' + progress + '" style="flex:1;accent-color:var(--accent)"'
+        + ' oninput="this.nextElementSibling.textContent=this.value+'%'"'
+        + ' onchange="updateLtProgress(\'' + item.dateStr + '\',\'' + item.id + '\',+this.value)">'
+        + '<span style="font-family:JetBrains Mono,monospace;font-size:11px;font-weight:700;min-width:38px;color:var(--accent)">' + pct + '%</span>'
+        + '</div>'
+      : '';
+
+    const cacheKey = 'lt_' + item.id;
+    _editCache[cacheKey] = { item, dateStr: item.dateStr, id: item.id };
+
+    return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:12px;border-left:3px solid ' + (st==='done'?'var(--green)':item.dueDate&&item.dueDate<today_?'var(--red)':'var(--accent)') + '">'
+      + '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:8px">'
+        + '<div style="flex:1;min-width:0">'
+          + '<div style="font-size:14px;font-weight:600;margin-bottom:4px">' + escHtml(item.description||'') + '</div>'
+          + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+            + '<span style="font-size:11px;color:' + pc + ';font-weight:500">' + m.name.split(' ')[0] + '</span>'
+            + (item.dueDate ? '<span style="font-size:10px;color:var(--text-muted);font-family:JetBrains Mono,monospace">📅 ' + item.dueDate + '</span>' : '')
+            + dueChip
+            + '<span style="font-size:10px;color:' + (statusColor[st]||'var(--text-muted)') + ';font-weight:600">' + (statusMap[st]||st) + '</span>'
+          + '</div>'
+        + '</div>'
+        + '<div style="display:flex;gap:6px;flex-shrink:0">'
+          + (st !== 'done' && st !== 'cancelled' ? '<button class="btn btn-s btn-sm" style="padding:3px 8px;font-size:11px" onclick="quickDoneLt(\'' + item.dateStr + '\',\'' + item.id + '\')">✓ Concluir</button>' : '')
+          + '<button class="btn btn-s btn-sm" style="padding:3px 8px;font-size:11px" onclick="showDelModal(_editCache[\'' + cacheKey + '\'].item,_editCache[\'' + cacheKey + '\'].dateStr,_editCache[\'' + cacheKey + '\'].id)">✏️</button>'
+        + '</div>'
+      + '</div>'
+      + '<div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-bottom:6px">'
+        + '<span>' + pct + '% concluído</span>'
+        + (timePct !== null ? '<span>· ' + timePct + '% do prazo consumido</span>' : '')
+        + (item.notes ? '<span style="font-style:italic">· ' + escHtml(item.notes.substring(0,60)) + '</span>' : '')
+      + '</div>'
+      + '<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">'
+        + '<div style="height:100%;border-radius:3px;background:' + pColor + ';width:' + pct + '%"></div>'
+      + '</div>'
+      + (timePct !== null ? '<div style="height:3px;background:var(--border);border-radius:2px;margin-top:2px;overflow:hidden"><div style="height:100%;background:var(--text-muted);opacity:.4;width:' + timePct + '%"></div></div>' : '')
+      + sliderHtml
+      + '</div>';
+  }
+
+  // Active section
+  if (active.length) {
+    html += '<div style="font-family:JetBrains Mono,monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:10px">Em andamento <span style="flex:1;height:1px;background:var(--border);display:block"></span></div>';
+    active.forEach(function(item) { html += buildLtCard(item); });
+  }
+
+  // Done section
+  if (done_list.length) {
+    html += '<div style="font-family:JetBrains Mono,monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin:20px 0 10px;display:flex;align-items:center;gap:10px">Concluídas <span style="flex:1;height:1px;background:var(--border);display:block"></span></div>';
+    done_list.forEach(function(item) { html += buildLtCard(item); });
+  }
+
+  document.getElementById('content').innerHTML = html;
+}
+
+// Quick-complete a longterm item
+function quickDoneLt(dateStr, id) {
+  const item = getDels(dateStr).find(i => i.id === id);
+  if (!item) return;
+  updDel(dateStr, id, { status: 'done', progress: 100, updatedAt: new Date().toISOString() });
+  updateLtBadge();
+  if (view === 'longterm') renderLongterm();
+  toast('✅ Entrega concluída!', 'green');
+}
+
+// Update progress of a longterm item
+function updateLtProgress(dateStr, id, val) {
+  updDel(dateStr, id, { progress: val, updatedAt: new Date().toISOString() });
+  updateLtBadge();
+}
 function setView(v){
   view=v;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.view===v));
@@ -4467,6 +4692,7 @@ function render(){
   switch(view){
     case 'ritual':   renderRitual(); break;
     case 'weekly':   renderWeekly(); break;
+    case 'longterm':  renderLongterm(); break;
     case 'metrics':  renderMetrics(); break;
     case 'executive':renderExecutive(); break;
     case 'team':     renderTeam(); break;
