@@ -1408,7 +1408,27 @@ function memberStats(memberId, n) {
   for(let i=0;i<n;i++){s=prevDay(s);const items=getDels(s).filter(x=>x.memberId===memberId&&x.status!=='cancelled');total+=items.length;done+=items.filter(x=>x.status==='done').length;partial+=items.filter(x=>x.status==='partial').length;missed+=items.filter(x=>x.status==='missed').length;carried+=items.filter(x=>x.status==='carried_over').length;}
   return {total,done,partial,missed,carried,delivery_rate:total?Math.round(((done+partial)/total)*100):null};
 }
-function countPending() { return getDels(prevDay(date)).filter(d=>d.status==='pending').length; }
+function countPending() {
+  const prev = prevDay(date);
+  // Usa getEffectiveDels para incluir recorrentes virtuais ainda não apurados
+  return getEffectiveDels(prev).filter(function(d) {
+    return d.status === 'pending' && !d._skipMarker;
+  }).length;
+}
+
+// Considera apuração concluída apenas se TODOS os itens do D-1
+// foram definitivamente apurados (done, partial, missed, cancelled)
+// i.e. nenhum ficou em 'pending' — incluindo virtuais
+function isApuracaoConcluida() {
+  const prev = prevDay(date);
+  const items = getEffectiveDels(prev).filter(function(d) {
+    return !d._skipMarker;
+  });
+  if (!items.length) return false; // sem itens = não há apuração
+  return items.every(function(d) {
+    return d.status !== 'pending';
+  });
+}
 
 // ═══════════════════════════════════════════════════
 // DELIVERABLE ACTIONS
@@ -1603,7 +1623,7 @@ function renderRitual() {
         <div class="pulse-dot"></div>
         <div class="rbar-title">Apuração: ${fmtShort(prev)}</div>
       </div>
-      <div class="rbar-sub" style="color:${pend>0?'var(--yellow)':'var(--green)'}">${pend>0?`${pend} item(s) aguardando apuração`:'Apuração concluída ✓'}</div>
+      <div class="rbar-sub" style="color:${pend>0?'var(--yellow)':isApuracaoConcluida()?'var(--green)':'var(--text-muted)'}">${pend>0?pend+' item(s) aguardando apuração':isApuracaoConcluida()?'Apuração concluída ✓':'Sem registros D-1'}</div>
     </div>
     <div class="rbar-sep"></div>
     <div class="rbar-item"><div class="rbar-val" style="color:var(--green)">${kpis.done}</div><div class="rbar-lbl">Entregues</div></div>
@@ -2741,6 +2761,7 @@ function renderExecutive() {
   // ── BACKLOG AGING ──
   html += `<div class="chart-card">
     <div class="chart-title">⏳ Backlog por Aging</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;font-family:'JetBrains Mono',monospace;letter-spacing:.04em">Itens <strong>Pendentes</strong> não apurados de dias anteriores. Parciais e não-entregues não compõem o backlog.</div>
     ${backlog.length === 0
       ? '<div class="empty" style="padding:30px"><div class="empty-icon">✅</div><div>Nenhum item pendente</div></div>'
       : backlog.slice(0,12).map(item => {
@@ -3037,9 +3058,10 @@ function computeBacklog(n) {
     if (dow === 0 || dow === 6) continue;
     const todayStr = today();
     const items = getEffectiveDels(s).filter(d => {
-      if (d.status!=='pending' && d.status!=='partial') return false;
+      // Só 'pending' é atraso real — partial/missed são resultados registrados
+      if (d.status !== 'pending') return false;
       if (d._virtual || d._skipMarker) return false;
-      // Longterm items: only include if past due date (real delay)
+      // Longterm: só entra se passou do prazo
       if ((d.type||'daily') === 'longterm') {
         return d.dueDate && d.dueDate < todayStr;
       }
