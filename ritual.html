@@ -599,6 +599,22 @@ body {
 @keyframes odPulse{0%,100%{opacity:1;}50%{opacity:.5;}}
 
 
+
+/* ═══ KANBAN ═══ */
+.kanban-board{display:flex;gap:14px;overflow-x:auto;padding-bottom:16px;align-items:flex-start;}
+.kanban-col{min-width:240px;max-width:260px;flex-shrink:0;background:var(--bg-hover);border-radius:var(--radius-lg);border:1px solid var(--border);display:flex;flex-direction:column;}
+.kanban-col-hdr{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg-hover);border-radius:var(--radius-lg) var(--radius-lg) 0 0;}
+.kanban-col-title{font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
+.kanban-col-count{font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 7px;border-radius:99px;background:var(--bg-card);color:var(--text-muted);}
+.kanban-items{padding:10px;display:flex;flex-direction:column;gap:8px;min-height:80px;}
+.kanban-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px;cursor:pointer;transition:box-shadow .15s,transform .15s;}
+.kanban-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.1);transform:translateY(-1px);}
+.kanban-card-title{font-size:12.5px;font-weight:500;margin-bottom:6px;line-height:1.4;}
+.kanban-card-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:6px;}
+.kanban-card-chip{font-size:9px;font-family:'JetBrains Mono',monospace;padding:1px 6px;border-radius:3px;background:var(--bg-hover);}
+.kanban-progress{height:3px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden;}
+.kanban-progress-fill{height:100%;border-radius:2px;}
+
 /* ═══ FOLGA / FERIADO ═══ */
 .folga-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;
   padding:10px 16px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.25);
@@ -665,6 +681,9 @@ body {
     <div class="nav-item" data-view="longterm">
       <span class="nav-icon">🎯</span><span>Longo Prazo</span>
       <span class="nav-badge hidden" id="lt-badge">0</span>
+    </div>
+    <div class="nav-item" data-view="kanban">
+      <span class="nav-icon">🗂</span><span>Kanban</span>
     </div>
     <div class="nav-label" style="margin-top:8px">Análise</div>
     <div class="nav-item" data-view="executive">
@@ -1184,7 +1203,10 @@ function getEffectiveDels(dateStr) {
   Object.entries(S.days).forEach(([ds, day]) => {
     (day.deliverables || []).forEach(item => {
       if ((item.type || 'daily') !== 'longterm') return;
-      if (!item.dueDate || item.dueDate !== dateStr) return;
+      if (!item.dueDate) return;
+      // Show reminder on dueDate AND one day before (D-1 alert)
+      const dueD1 = prevDay(item.dueDate);
+      if (item.dueDate !== dateStr && dueD1 !== dateStr) return;
       // Don't show reminder if original is on the same date
       if (ds === dateStr) return;
       // Don't duplicate if already a reminder for this source on this date
@@ -1620,6 +1642,8 @@ function renderRitual() {
 
   // ── Backlog critical alert ──
   const criticalBacklog = computeBacklog(30).filter(b=>b.aging>=3);
+  // Overdue longterm projects
+  const overdueLt = getAllLongterm().filter(i=>i.status!=='done'&&i.status!=='cancelled'&&i.dueDate&&i.dueDate<today());
   if(criticalBacklog.length>0){
     const worstAging = criticalBacklog.reduce((mx,b)=>b.aging>mx?b.aging:mx,0);
     const top3 = [...new Set(criticalBacklog.map(b=>getMember(b.memberId).name.split(' ')[0]))].slice(0,3).join(', ');
@@ -2672,6 +2696,7 @@ function renderExecutive() {
   const critBacklog = backlog.filter(b => b.aging >= 3).length;
   const topCause   = causes14.length ? CAUSES[causes14[0][0]]?.lbl : '—';
   const overloaded = Object.entries(load).filter(([mid, l]) => l.total > 5).map(([mid]) => getMember(mid).name);
+  const overdueLtExec = getAllLongterm().filter(i=>i.status!=='done'&&i.status!=='cancelled'&&i.dueDate&&i.dueDate<lastWeekday(prev));
 
   let html = `<div class="sec-hd">
     <div class="sec-title">🎯 Dashboard Executivo</div>
@@ -3010,9 +3035,16 @@ function computeBacklog(n) {
     // Skip weekends — no activity expected
     const dow = new Date(s+'T12:00:00').getDay();
     if (dow === 0 || dow === 6) continue;
-    const items = getEffectiveDels(s).filter(d =>
-      (d.status==='pending'||d.status==='partial') && !d._virtual && !d._skipMarker
-    );
+    const todayStr = today();
+    const items = getEffectiveDels(s).filter(d => {
+      if (d.status!=='pending' && d.status!=='partial') return false;
+      if (d._virtual || d._skipMarker) return false;
+      // Longterm items: only include if past due date (real delay)
+      if ((d.type||'daily') === 'longterm') {
+        return d.dueDate && d.dueDate < todayStr;
+      }
+      return true;
+    });
     items.forEach(item => {
       // Use memberId+description as dedup key — keep only the oldest occurrence
       const key = (item.memberId||'') + '|' + (item.description||'').trim().toLowerCase();
@@ -3146,6 +3178,18 @@ function removeHolidayRange(startDate, endDate) {
 
 // Open the folga modal — supports single day or date range
 
+
+function onLtStatusChange(status) {
+  const ltFields = document.getElementById('lt-fields');
+  if (!ltFields || ltFields.style.display === 'none') return;
+  const completedEl = document.getElementById('f-completeddate');
+  if (!completedEl) return;
+  if (status === 'done' && !completedEl.value) {
+    completedEl.value = today();
+  } else if (status !== 'done') {
+    // Don't clear — user may have set it intentionally
+  }
+}
 function toggleAllFolgaChk(checked) {
   document.querySelectorAll('.folga-mbr-chk').forEach(function(c){ c.checked = checked; });
 }
@@ -3284,7 +3328,21 @@ function typeBadge(item){
   }
   return `<span class="dtype-badge ${t}">${c.i} ${c.l}</span>`;
 }
-function ltChip(item){if((item.type||'daily')!=='longterm'||!item.dueDate)return '';const dr=daysRemaining(item.dueDate);if(dr===null)return '';const cls=dr<0?'over':dr<=3?'warn':'ok';const lbl=dr<0?`${Math.abs(dr)}d atraso`:dr===0?'Vence hoje':`${dr}d restantes`;return `<span class="lt-chip ${cls}" title="${item.dueDate}">🎯 ${lbl}</span>`;}
+function ltChip(item){
+  if((item.type||'daily')!=='longterm'||!item.dueDate) return '';
+  if(item.status==='done'){
+    if(!item.completedDate && !item.dueDate) return '<span class="lt-chip ok">🎯 Concluída</span>';
+    const cmp = item.completedDate || today();
+    const diff = Math.round((new Date(item.dueDate+'T00:00:00') - new Date(cmp+'T00:00:00'))/86400000);
+    const lbl = diff > 0 ? diff+'d antes' : diff < 0 ? Math.abs(diff)+'d atraso' : 'No prazo';
+    return '<span class="lt-chip ok">🎯 ✓ ' + lbl + '</span>';
+  }
+  const dr=daysRemaining(item.dueDate);
+  if(dr===null) return '';
+  const cls=dr<0?'over':dr<=3?'warn':'ok';
+  const lbl=dr<0?(Math.abs(dr)+'d atraso'):dr===0?'Vence hoje':(dr+'d restantes');
+  return '<span class="lt-chip '+cls+'" title="'+item.dueDate+'">🎯 '+lbl+'</span>';
+}
 function ltBar(item){
   if((item.type||'daily')!=='longterm') return '';
   const progress = item.progress || 0;
@@ -3292,17 +3350,20 @@ function ltBar(item){
 
   // ── Item concluído ──
   if(status === 'done'){
-    const early = item.dueDate && (item.dueDate > (item.updatedAt||item.createdAt||'').split('T')[0]);
-    // Calculate days delivered early if possible
     let earlyMsg = '';
     if(item.dueDate){
-      const due  = new Date(item.dueDate+'T00:00:00');
-      const now  = new Date(); now.setHours(0,0,0,0);
-      const diff = Math.round((due - now)/86400000);
-      if(diff > 0) earlyMsg = ' · ' + diff + 'd antes do prazo';
+      // Use completedDate if available, otherwise today
+      const completedStr = item.completedDate || today();
+      const due          = new Date(item.dueDate+'T00:00:00');
+      const completed    = new Date(completedStr+'T00:00:00');
+      const diff         = Math.round((due - completed)/86400000);
+      if(diff > 0)       earlyMsg = ' · ' + diff + 'd antes do prazo';
+      else if(diff < 0)  earlyMsg = ' · ' + Math.abs(diff) + 'd de atraso';
+      else               earlyMsg = ' · No prazo';
     }
+    const conclusionLabel = item.completedDate ? (' em ' + item.completedDate) : '';
     return '<div style="margin-top:4px">'
-      + '<span class="lt-schedule-chip lt-on-track">✓ Entregue' + earlyMsg + '</span>'
+      + '<span class="lt-schedule-chip lt-on-track">✓ Concluída' + conclusionLabel + earlyMsg + '</span>'
       + '<div class="lt-progress" title="100% concluído"><div class="lt-progress-fill" style="width:100%;background:var(--green)"></div></div>'
       + '</div>';
   }
@@ -3435,8 +3496,9 @@ function showDelModal(item,dateStr,editId){
       <div class="lt-fields-box">
         <div class="lt-fields-title">🎯 Configuração de Longo Prazo</div>
         <div class="frow">
-          <div class="fg"><label class="flbl">Data de Início</label><input class="fi" id="f-startdate" type="date" value="${item?.startDate||dateStr}"></div>
-          <div class="fg"><label class="flbl">Data-alvo *</label><input class="fi" id="f-duedate" type="date" value="${item?.dueDate||''}"></div>
+          <div class="fg"><label class="flbl">Início</label><input class="fi" id="f-startdate" type="date" value="${item?.startDate||dateStr}"></div>
+          <div class="fg"><label class="flbl">Prazo previsto *</label><input class="fi" id="f-duedate" type="date" value="${item?.dueDate||''}"></div>
+          <div class="fg"><label class="flbl">Conclusão efetiva</label><input class="fi" id="f-completeddate" type="date" value="${item?.completedDate||''}" placeholder="Preencher ao concluir"></div>
         </div>
         <div class="fg"><label class="flbl">Progresso — <span id="f-progress-val">${item?.progress||0}%</span></label>
           <input type="range" id="f-progress" min="0" max="100" value="${item?.progress||0}" style="width:100%;accent-color:var(--yellow);cursor:pointer;margin-top:4px" oninput="document.getElementById('f-progress-val').textContent=this.value+'%'">
@@ -3469,7 +3531,7 @@ function showDelModal(item,dateStr,editId){
     <div class="frow3">
       <div class="fg"><label class="flbl">Prioridade</label><select class="fsel" id="f-priority"><option value="">—</option>${Object.entries(PRIORITIES).map(([k,v])=>`<option value="${k}" ${item?.priority===k?'selected':''}>${v.lbl}</option>`).join('')}</select></div>
       <div class="fg"><label class="flbl">Categoria</label><select class="fsel" id="f-category"><option value="">—</option>${S.settings.categories.map(c=>`<option value="${c}" ${item?.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="fg"><label class="flbl">Status</label><select class="fsel" id="f-status">${Object.entries(STATUSES).map(([k,v])=>`<option value="${k}" ${(item?.status||'pending')===k?'selected':''}>${v.lbl}</option>`).join('')}</select></div>
+      <div class="fg"><label class="flbl">Status</label><select class="fsel" id="f-status" onchange="onLtStatusChange(this.value)">${Object.entries(STATUSES).map(([k,v])=>`<option value="${k}" ${(item?.status||'pending')===k?'selected':''}>${v.lbl}</option>`).join('')}</select></div>
     </div>
     <div id="f-dedup-alert" class="dedup-alert">⚠️ Atividade semelhante já registrada para este membro nesta data.</div>
     <div class="fg" style="margin-bottom:10px;">
@@ -3563,6 +3625,7 @@ function submitDel(dateStr,editId){
   const type=document.getElementById('f-type')?.value||'daily';
   const startDate=document.getElementById('f-startdate')?.value||'';
   const dueDate=document.getElementById('f-duedate')?.value||'';
+  const completedDate=document.getElementById('f-completeddate')?.value||'';
   const progress=parseInt(document.getElementById('f-progress')?.value||0);
 
   if(!desc){toast('❌ Descrição obrigatória','red');return;}
@@ -3618,7 +3681,7 @@ function submitDel(dateStr,editId){
     ...(qtyError   !== undefined ? {qtyError}   : {}),
     ...(qtyUnit    !== undefined ? {qtyUnit}     : {}),
     ...(cause      !== undefined ? {cause}       : {}),
-    ...(type==='longterm'?{startDate,dueDate,progress}:{})};
+    ...(type==='longterm'?{startDate,dueDate,progress,...(completedDate?{completedDate}:(status==='done'?{completedDate:today()}:{}))}:{})};
   if(editId){updDel(dateStr,editId,data);toast('✅ Entrega atualizada','green');}
   else{addDel(dateStr,data);toast('✅ Entrega adicionada','green');}
   closeModal();
@@ -3636,6 +3699,7 @@ function submitDelAndAnother(dateStr){
   const type=document.getElementById('f-type')?.value||'daily';
   const startDate=document.getElementById('f-startdate')?.value||'';
   const dueDate=document.getElementById('f-duedate')?.value||'';
+  const completedDate=document.getElementById('f-completeddate')?.value||'';
   const progress=parseInt(document.getElementById('f-progress')?.value||0);
   addDel(dateStr,{description:desc,memberId,deadline,priority,category,status,notes,blocker,type,...(type==='longterm'?{startDate,dueDate,progress}:{})});
   toast('✅ Adicionado — formulário pronto para próximo item','green');
@@ -4294,7 +4358,7 @@ function quickAddForMember(id){openBatchAdd(date,id);}
 // ═══════════════════════════════════════════════════
 // MAIN RENDER
 // ═══════════════════════════════════════════════════
-const TITLES={ritual:'⚡ Ritual Matinal',longterm:'🎯 Entregas de Longo Prazo',holidays:'🏖 Folgas & Feriados',executive:'🎯 Dashboard Executivo',weekly:'📅 Visão Semanal',metrics:'📊 KPIs & Métricas',team:'👥 Time & Pilares',history:'📋 Histórico',templates:'🔁 Templates',recurring:'↻ Recorrentes',kpis:'⚙️ Config. KPIs',settings:'🔧 Configurações'};
+const TITLES={ritual:'⚡ Ritual Matinal',kanban:'🗂 Kanban de Projetos',longterm:'🎯 Entregas de Longo Prazo',holidays:'🏖 Folgas & Feriados',executive:'🎯 Dashboard Executivo',weekly:'📅 Visão Semanal',metrics:'📊 KPIs & Métricas',team:'👥 Time & Pilares',history:'📋 Histórico',templates:'🔁 Templates',recurring:'↻ Recorrentes',kpis:'⚙️ Config. KPIs',settings:'🔧 Configurações'};
 
 
 // ═══════════════════════════════════════════════════
@@ -4574,14 +4638,15 @@ function renderLongterm() {
       const diff = Math.round((due-now)/86400000);
       if (st === 'done') {
         // Show how many days before/after due date it was completed
-        const completedOn = (item.updatedAt||item.createdAt||'').split('T')[0] || today_;
-        const completedDate = new Date(completedOn+'T00:00:00');
-        const earlyDays = Math.round((due-completedDate)/86400000);
+        const completedOn   = item.completedDate || (item.updatedAt||item.createdAt||'').split('T')[0] || today_;
+        const completedDt   = new Date(completedOn+'T00:00:00');
+        const earlyDays     = Math.round((due-completedDt)/86400000);
+        const completedLabel = item.completedDate ? (' · Concluída em ' + item.completedDate) : '';
         dueChip = earlyDays > 0
-          ? '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(16,185,129,.1);color:var(--green);font-family:JetBrains Mono,monospace">' + earlyDays + 'd antes do prazo</span>'
+          ? '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(16,185,129,.1);color:var(--green);font-family:JetBrains Mono,monospace">✓ ' + earlyDays + 'd antes' + completedLabel + '</span>'
           : earlyDays < 0
-            ? '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,.1);color:var(--red);font-family:JetBrains Mono,monospace">' + Math.abs(earlyDays) + 'd após o prazo</span>'
-            : '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(16,185,129,.1);color:var(--green);font-family:JetBrains Mono,monospace">No prazo</span>';
+            ? '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,.1);color:var(--red);font-family:JetBrains Mono,monospace">⚠ ' + Math.abs(earlyDays) + 'd após o prazo' + completedLabel + '</span>'
+            : '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(16,185,129,.1);color:var(--green);font-family:JetBrains Mono,monospace">✓ No prazo' + completedLabel + '</span>';
       } else if (diff < 0) {
         dueChip = '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,.1);color:var(--red);font-weight:700;font-family:JetBrains Mono,monospace">⚠ ' + Math.abs(diff) + 'd em atraso</span>';
       } else if (diff <= 2) {
@@ -4652,9 +4717,26 @@ function renderLongterm() {
     active.forEach(function(item) { html += buildLtCard(item); });
   }
 
-  // Done section
+  // Done section — with variance summary
   if (done_list.length) {
+    // Calc avg variance
+    var earlyCount = 0, onTimeCount = 0, lateCount = 0;
+    done_list.forEach(function(item) {
+      if (!item.dueDate) return;
+      var cmp  = item.completedDate || (item.updatedAt||'').split('T')[0] || today();
+      var diff = Math.round((new Date(item.dueDate+'T00:00:00') - new Date(cmp+'T00:00:00'))/86400000);
+      if (diff > 0) earlyCount++; else if (diff < 0) lateCount++; else onTimeCount++;
+    });
+    var summaryHtml = '';
+    if (earlyCount + onTimeCount + lateCount > 0) {
+      summaryHtml = '<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+        + (earlyCount  ? '<span style="font-size:11px;padding:3px 10px;border-radius:4px;background:rgba(16,185,129,.1);color:var(--green)">' + earlyCount + ' antecipada(s)</span>' : '')
+        + (onTimeCount ? '<span style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--bg-hover);color:var(--text-muted)">' + onTimeCount + ' no prazo</span>' : '')
+        + (lateCount   ? '<span style="font-size:11px;padding:3px 10px;border-radius:4px;background:rgba(239,68,68,.1);color:var(--red)">' + lateCount + ' com atraso</span>' : '')
+        + '</div>';
+    }
     html += '<div style="font-family:JetBrains Mono,monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin:20px 0 10px;display:flex;align-items:center;gap:10px">Concluídas <span style="flex:1;height:1px;background:var(--border);display:block"></span></div>';
+    html += summaryHtml;
     done_list.forEach(function(item) { html += buildLtCard(item); });
   }
 
@@ -4665,7 +4747,7 @@ function renderLongterm() {
 function quickDoneLt(dateStr, id) {
   const item = getDels(dateStr).find(i => i.id === id);
   if (!item) return;
-  updDel(dateStr, id, { status: 'done', progress: 100, updatedAt: new Date().toISOString() });
+  updDel(dateStr, id, { status: 'done', progress: 100, completedDate: today(), updatedAt: new Date().toISOString() });
   updateLtBadge();
   if (view === 'longterm') renderLongterm();
   toast('✅ Entrega concluída!', 'green');
@@ -4676,6 +4758,138 @@ function updateLtProgress(dateStr, id, val) {
   updDel(dateStr, id, { progress: val, updatedAt: new Date().toISOString() });
   updateLtBadge();
 }
+
+// ═══════════════════════════════════════════════════
+// RENDER: KANBAN DE PROJETOS
+// ═══════════════════════════════════════════════════
+function renderKanban() {
+  destroyCharts();
+  const todayStr = today();
+  const all = getAllLongterm();
+
+  // Categorize into columns
+  function classify(item) {
+    const st = item.status || 'pending';
+    if (st === 'done')      return 'done';
+    if (st === 'cancelled') return 'cancelled';
+    if (!item.dueDate)      return 'todo';
+    const diff = Math.round((new Date(item.dueDate+'T00:00:00') - new Date(todayStr+'T00:00:00'))/86400000);
+    if (diff < 0)           return 'overdue';
+    const prog = item.progress || 0;
+    if (prog === 0)         return 'todo';
+    if (diff <= 3 || (item.startDate && item.dueDate)) {
+      // at-risk if: due soon OR time consumed > progress + 15%
+      const start = new Date((item.startDate||todayStr)+'T00:00:00');
+      const due   = new Date(item.dueDate+'T00:00:00');
+      const now   = new Date(todayStr+'T00:00:00');
+      const totalD = Math.max(1,(due-start)/86400000);
+      const elapsed = Math.max(0,(now-start)/86400000);
+      const timePct = Math.round((elapsed/totalD)*100);
+      if (timePct - prog >= 20) return 'atrisk';
+    }
+    return 'doing';
+  }
+
+  const cols = {
+    todo:      { label:'A Fazer',    icon:'📋', color:'#6b7280', items:[] },
+    doing:     { label:'Em Andamento',icon:'🔄', color:'var(--accent)', items:[] },
+    atrisk:    { label:'Em Risco',   icon:'⚠️', color:'var(--yellow)', items:[] },
+    overdue:   { label:'Atrasado',   icon:'🚨', color:'var(--red)', items:[] },
+    done:      { label:'Concluído',  icon:'✅', color:'var(--green)', items:[] },
+    cancelled: { label:'Cancelado',  icon:'✕',  color:'var(--text-muted)', items:[] },
+  };
+
+  all.forEach(function(item) { cols[classify(item)].items.push(item); });
+
+  // Sort: overdue by most overdue first, others by dueDate
+  Object.values(cols).forEach(function(col) {
+    col.items.sort(function(a,b) {
+      const da = a.dueDate||'9999', db = b.dueDate||'9999';
+      return da.localeCompare(db);
+    });
+  });
+
+  const total = all.length;
+  let html = '<div class="sec-hd">'
+    + '<div class="sec-title">🗂 Kanban de Projetos</div>'
+    + '<div class="sec-actions">'
+    + '<button class="btn btn-p btn-sm" onclick="openAddDel(today())">+ Novo Projeto</button>'
+    + '</div></div>';
+
+  if (!total) {
+    html += '<div class="empty"><div class="empty-icon">🗂</div><div class="empty-text">Nenhum projeto de longo prazo cadastrado</div></div>';
+    document.getElementById('content').innerHTML = html;
+    return;
+  }
+
+  // Stats strip
+  html += '<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">';
+  Object.entries(cols).forEach(function(e) {
+    var k=e[0], col=e[1];
+    if (!col.items.length) return;
+    html += '<div style="padding:6px 12px;border-radius:var(--radius);background:var(--bg-card);border:1px solid var(--border);font-size:12px">'
+      + col.icon + ' <strong style="color:' + col.color + '">' + col.items.length + '</strong>'
+      + ' <span style="color:var(--text-muted)">' + col.label + '</span></div>';
+  });
+  html += '</div>';
+
+  html += '<div class="kanban-board">';
+
+  var colOrder = ['overdue','atrisk','doing','todo','done','cancelled'];
+  colOrder.forEach(function(k) {
+    var col = cols[k];
+    if (!col.items.length && (k==='cancelled'||k==='done')) return; // hide empty done/cancelled
+
+    html += '<div class="kanban-col">'
+      + '<div class="kanban-col-hdr">'
+        + '<span class="kanban-col-title" style="color:' + col.color + '">' + col.icon + ' ' + col.label + '</span>'
+        + '<span class="kanban-col-count">' + col.items.length + '</span>'
+      + '</div>'
+      + '<div class="kanban-items">';
+
+    if (!col.items.length) {
+      html += '<div style="text-align:center;padding:20px 10px;color:var(--text-muted);font-size:12px">Vazio</div>';
+    }
+
+    col.items.forEach(function(item) {
+      var m      = getMember(item.memberId);
+      var pc     = getPillarColor(m.pillarId);
+      var prog   = item.status==='done' ? 100 : (item.progress||0);
+      var pColor = prog>=80?'var(--green)':prog>=40?'var(--yellow)':'var(--red)';
+      if (item.status==='done') pColor='var(--green)';
+
+      var dueChip = '';
+      if (item.dueDate) {
+        var diff = Math.round((new Date(item.dueDate+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000);
+        var dueColor = diff<0?'var(--red)':diff<=2?'var(--yellow)':'var(--text-muted)';
+        var dueLabel = item.status==='done'
+          ? (item.completedDate || item.dueDate)
+          : (diff<0 ? Math.abs(diff)+'d atraso' : diff===0 ? 'hoje' : diff+'d restantes');
+        dueChip = '<span class="kanban-card-chip" style="color:' + dueColor + '">' + dueLabel + '</span>';
+      }
+
+      var cacheKey = 'kb_' + item.id;
+      _editCache[cacheKey] = { item: item, dateStr: item.dateStr, id: item.id };
+
+      html += '<div class="kanban-card" onclick="showDelModal(_editCache[\'' + cacheKey + '\'].item,_editCache[\'' + cacheKey + '\'].dateStr,_editCache[\'' + cacheKey + '\'].id)">'
+        + '<div class="kanban-card-title">' + escHtml(item.description||'') + '</div>'
+        + '<div class="kanban-card-meta">'
+          + '<span class="kanban-card-chip" style="color:' + pc + ';background:' + pc + '15">' + m.name.split(' ')[0] + '</span>'
+          + dueChip
+          + (prog>0 && item.status!=='done' ? '<span class="kanban-card-chip">' + prog + '%</span>' : '')
+          + (item.status==='done' ? '<span class="kanban-card-chip" style="color:var(--green)">✓</span>' : '')
+        + '</div>'
+        + (item.status!=='done' && item.status!=='cancelled' ? '<div class="kanban-progress"><div class="kanban-progress-fill" style="width:' + prog + '%;background:' + pColor + '"></div></div>' : '')
+        + '</div>';
+    });
+
+    html += '</div></div>'; // kanban-items + kanban-col
+  });
+
+  html += '</div>'; // kanban-board
+  document.getElementById('content').innerHTML = html;
+}
+
 function setView(v){
   view=v;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.view===v));
@@ -4693,6 +4907,7 @@ function render(){
     case 'ritual':   renderRitual(); break;
     case 'weekly':   renderWeekly(); break;
     case 'longterm':  renderLongterm(); break;
+    case 'kanban':    renderKanban(); break;
     case 'metrics':  renderMetrics(); break;
     case 'executive':renderExecutive(); break;
     case 'team':     renderTeam(); break;
