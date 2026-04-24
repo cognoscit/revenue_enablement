@@ -5271,7 +5271,11 @@ function renderAvaliacoes() {
         });
       }
 
-      membersHtml += '<div class="aval-member-row" onclick="openAvalModal(' + JSON.stringify(m.id) + ',' + JSON.stringify(weekK) + ')">'
+      var ak='am_'+weekK.replace(/[^a-z0-9]/gi,'_')+'_'+m.id.replace(/[^a-z0-9]/gi,'_');
+      if(!window._avalModalCache) window._avalModalCache={};
+      window._avalModalCache[ak]={memberId:m.id,weekK:weekK};
+      membersHtml += '<div class="aval-member-row" onclick="_openAvalModal(\'' + ak + '\')">'
+
         + renderAvatar(m.id, 32, 11)
         + '<div style="flex:1;min-width:0">'
           + '<div style="font-size:13px;font-weight:500">' + escHtml(m.name) + '</div>'
@@ -5411,6 +5415,11 @@ var _identitySelectCache = {};
 
 // Cache for identity selection
 var _identitySelectCache = {};
+
+function _openAvalModal(k) {
+  var c=window._avalModalCache&&window._avalModalCache[k];
+  if(c) openAvalModal(c.memberId,c.weekK);
+}
 
 function _openAvalFromCache(k) {
   var c=window._avalCache&&window._avalCache[k];
