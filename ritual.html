@@ -615,6 +615,28 @@ body {
 .kanban-progress{height:3px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden;}
 .kanban-progress-fill{height:100%;border-radius:2px;}
 
+
+/* ═══ AUTOAVALIAÇÃO ═══ */
+.aval-week-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:12px;cursor:pointer;transition:background .15s;}
+.aval-week-hdr:hover{background:var(--bg-hover);}
+.aval-week-title{font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:.04em;color:var(--text-primary);}
+.aval-week-meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);margin-top:2px;}
+.aval-member-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;}
+.aval-member-row:hover{border-color:var(--accent);cursor:pointer;}
+.aval-score-pills{display:flex;gap:5px;flex-wrap:wrap;}
+.aval-score-pill{font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600;}
+.aval-star-row{display:flex;gap:4px;align-items:center;}
+.aval-star{font-size:18px;cursor:pointer;filter:grayscale(1);transition:filter .1s,transform .1s;}
+.aval-star.active{filter:none;}
+.aval-star:hover{transform:scale(1.2);}
+.aval-modal-section{margin-bottom:16px;}
+.aval-modal-label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;}
+.aval-real-kpi{display:flex;gap:8px;padding:10px 12px;background:var(--bg-hover);border-radius:var(--radius);margin-bottom:14px;flex-wrap:wrap;}
+.aval-real-kpi-item{text-align:center;}
+.aval-real-kpi-val{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;}
+.aval-real-kpi-lbl{font-size:9px;color:var(--text-muted);letter-spacing:.06em;text-transform:uppercase;}
+.aval-trend{display:flex;align-items:center;gap:4px;font-size:11px;font-family:'JetBrains Mono',monospace;}
+
 /* ═══ FOLGA / FERIADO ═══ */
 .folga-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;
   padding:10px 16px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.25);
@@ -711,6 +733,10 @@ body {
     </div>
     <div class="nav-item" data-view="kpis">
       <span class="nav-icon">⚙️</span><span>Config. KPIs</span>
+    </div>
+    <div class="nav-item" data-view="avaliacoes">
+      <span class="nav-icon">⭐</span><span>Autoavaliações</span>
+      <span class="nav-badge hidden" id="aval-badge">!</span>
     </div>
     <div class="nav-item" data-view="settings">
       <span class="nav-icon">🔧</span><span>Configurações</span>
@@ -838,7 +864,9 @@ function defaultState() {
     ],
     days: {},
     recurring: [],
-    holidays: {},   // { 'YYYY-MM-DD': { label:'Feriado', memberIds:[] } } memberIds=[] means all
+    holidays: {},
+    assessments: {},  // { 'YYYY-WXX': { memberId: { scores:{}, notes:'', commitment:'', updatedAt:'' } } }
+    lastWorkdayMode: false,  // toggle: último dia útil da semana
     templates: [],
     kpis: [
       { id:'k1', name:'Taxa de Entrega',  metric:'delivery_rate',      pillarId:null, memberId:null, color:'#10b981', target:90,  enabled:true },
@@ -1002,7 +1030,9 @@ async function load() {
     S = raw ? JSON.parse(raw) : defaultState();
     if (!S.version||S.version<3) S = defaultState();
     if (!S.pillars)   S.pillars   = defaultState().pillars;
-    if (!S.holidays)  S.holidays  = {};
+    if (!S.holidays)      S.holidays      = {};
+    if (!S.assessments)   S.assessments   = {};
+    if (S.lastWorkdayMode === undefined) S.lastWorkdayMode = false;
     if (!S.templates) S.templates = [];
     if (!S.recurring) S.recurring = [];
     if(!ghTkGet())loadSeedIfNeeded();
@@ -1540,6 +1570,7 @@ function applyTemplates(dateStr) {
 function renderSidebar() {
   updateHolidayBadge();
   updateLtBadge();
+  updateAvalBadge();
   const wrap=document.getElementById('sidebar-team'); if(!wrap) return;
   let html='<div class="sidebar-team-label">Membros do Time</div>';
   S.team.filter(m=>m.active).forEach(m=>{
@@ -1638,6 +1669,7 @@ function renderRitual() {
     <div style="margin-left:auto;display:flex;gap:7px;flex-wrap:wrap;">
       <button class="btn btn-s btn-sm" onclick="applyTemplates('${date}')">🔁 Templates</button>
       <button class="btn btn-s btn-sm ${getHoliday(date)?'btn-p':''}" onclick="openFolgaModal('${date}')" title="Marcar folga/feriado para este dia">🏖 Folga</button>
+      <button class="btn btn-s btn-sm ${S.lastWorkdayMode?'btn-p':''}" onclick="toggleLastWorkday()" title="Ativar avaliações semanais neste dia">⭐ Último dia útil</button>
       <button class="btn btn-s btn-sm" onclick="generateWeeklyReport()">📄 Relatório PDF</button>
       <button class="btn btn-s btn-sm" onclick="window.print()">🖨 Imprimir</button>
     </div>
@@ -1657,6 +1689,21 @@ function renderRitual() {
       + '<div><div class="folga-banner-text">' + escHtml(hd.label) + ' — ' + fmtShort(ds) + '</div>'
       + '<div class="folga-banner-sub">' + scope + ' · Recorrentes suspensos</div></div></div>'
       + '<button class="btn btn-s btn-sm" onclick="openFolgaModal(\'' + ds + '\')">✏️ Editar</button>'
+      + '</div>';
+  }
+
+  // ── Autoavaliação banner (último dia útil) ──
+  if (S.lastWorkdayMode) {
+    const wk = weekKey(date);
+    const pending = S.team.filter(m => m.active && !getAssessment(wk, m.id));
+    const done_   = S.team.filter(m => m.active &&  getAssessment(wk, m.id));
+    html += '<div class="folga-banner" style="background:rgba(99,102,241,.06);border-color:rgba(99,102,241,.25);cursor:pointer" onclick="setView(\'avaliacoes\')">'
+      + '<div class="folga-banner-left"><div class="folga-banner-icon">⭐</div>'
+      + '<div><div class="folga-banner-text" style="color:#6366f1">Autoavaliação semanal — ' + wk + '</div>'
+      + '<div class="folga-banner-sub">'
+      + (pending.length ? pending.length + ' colaborador(es) aguardando · ' : '')
+      + done_.length + ' preenchida(s)</div></div></div>'
+      + '<button class="btn btn-s btn-sm" onclick="event.stopPropagation();setView(\'avaliacoes\')">Ver avaliações →</button>'
       + '</div>';
   }
 
@@ -4380,7 +4427,7 @@ function quickAddForMember(id){openBatchAdd(date,id);}
 // ═══════════════════════════════════════════════════
 // MAIN RENDER
 // ═══════════════════════════════════════════════════
-const TITLES={ritual:'⚡ Ritual Matinal',kanban:'🗂 Kanban de Projetos',longterm:'🎯 Entregas de Longo Prazo',holidays:'🏖 Folgas & Feriados',executive:'🎯 Dashboard Executivo',weekly:'📅 Visão Semanal',metrics:'📊 KPIs & Métricas',team:'👥 Time & Pilares',history:'📋 Histórico',templates:'🔁 Templates',recurring:'↻ Recorrentes',kpis:'⚙️ Config. KPIs',settings:'🔧 Configurações'};
+const TITLES={ritual:'⚡ Ritual Matinal',avaliacoes:'⭐ Autoavaliações Semanais',kanban:'🗂 Kanban de Projetos',longterm:'🎯 Entregas de Longo Prazo',holidays:'🏖 Folgas & Feriados',executive:'🎯 Dashboard Executivo',weekly:'📅 Visão Semanal',metrics:'📊 KPIs & Métricas',team:'👥 Time & Pilares',history:'📋 Histórico',templates:'🔁 Templates',recurring:'↻ Recorrentes',kpis:'⚙️ Config. KPIs',settings:'🔧 Configurações'};
 
 
 // ═══════════════════════════════════════════════════
@@ -4912,6 +4959,309 @@ function renderKanban() {
   document.getElementById('content').innerHTML = html;
 }
 
+
+// ═══════════════════════════════════════════════════
+// AUTOAVALIAÇÃO — ENGINE
+// ═══════════════════════════════════════════════════
+
+// ISO week key: YYYY-WXX
+function weekKey(dateStr) {
+  var d = new Date((dateStr||today()) + 'T12:00:00');
+  var jan4 = new Date(d.getFullYear(), 0, 4);
+  var dayOfYear = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
+  var weekNum = Math.ceil((dayOfYear + jan4.getDay()) / 7);
+  return d.getFullYear() + '-W' + String(weekNum).padStart(2,'0');
+}
+
+// Criteria for self-assessment
+var AVAL_CRITERIA = [
+  { id:'desempenho',    label:'Desempenho Geral',       icon:'⚡' },
+  { id:'entregas',      label:'Cumprimento de Entregas', icon:'📦' },
+  { id:'esforco',       label:'Esforço / Dedicação',    icon:'💪' },
+  { id:'colaboracao',   label:'Colaboração',             icon:'🤝' },
+];
+
+// Get or create assessment record
+function getAssessment(weekK, memberId) {
+  if (!S.assessments) S.assessments = {};
+  if (!S.assessments[weekK]) S.assessments[weekK] = {};
+  return S.assessments[weekK][memberId] || null;
+}
+
+function saveAssessment(weekK, memberId, data) {
+  if (!S.assessments) S.assessments = {};
+  if (!S.assessments[weekK]) S.assessments[weekK] = {};
+  S.assessments[weekK][memberId] = Object.assign({ updatedAt: new Date().toISOString() }, data);
+  save();
+  updateAvalBadge();
+}
+
+function updateAvalBadge() {
+  var b = document.getElementById('aval-badge');
+  if (!b) return;
+  // Badge shows ! if it's lastWorkdayMode and current week has pending assessments
+  if (!S.lastWorkdayMode) { b.classList.add('hidden'); return; }
+  var wk = weekKey(today());
+  var pending = S.team.filter(function(m) {
+    return m.active && !getAssessment(wk, m.id);
+  }).length;
+  if (pending > 0) { b.textContent = pending; b.classList.remove('hidden'); }
+  else b.classList.add('hidden');
+}
+
+// Average score for a member in a week
+function avgScore(assessment) {
+  if (!assessment || !assessment.scores) return null;
+  var vals = Object.values(assessment.scores).filter(function(v){ return v > 0; });
+  if (!vals.length) return null;
+  return (vals.reduce(function(a,b){return a+b;},0) / vals.length).toFixed(1);
+}
+
+// Real KPIs for a member for the week of a given weekKey
+function memberWeekKPIs(memberId, weekK) {
+  // Reconstruct week dates from weekKey
+  var year = parseInt(weekK.split('-W')[0]);
+  var week = parseInt(weekK.split('-W')[1]);
+  // Get Mon of that week
+  var jan4 = new Date(year, 0, 4);
+  var mon  = new Date(jan4.getTime() - (jan4.getDay()||7 - 1)*86400000 + (week-1)*7*86400000);
+  var days = [];
+  for (var i=0;i<5;i++) {
+    var dd = new Date(mon.getTime() + i*86400000);
+    days.push(dd.toISOString().split('T')[0]);
+  }
+  var total=0,done=0,partial=0,missed=0;
+  days.forEach(function(ds) {
+    getDels(ds).filter(function(d){ return d.memberId===memberId && d.status!=='cancelled' && !d._skipMarker; }).forEach(function(d) {
+      total++;
+      if(d.status==='done') done++;
+      else if(d.status==='partial') partial++;
+      else if(d.status==='missed') missed++;
+    });
+  });
+  var rate = total ? Math.round(((done+partial)/total)*100) : null;
+  return { total, done, partial, missed, rate };
+}
+
+// Open assessment modal for a member
+function openAvalModal(memberId, weekK) {
+  var m      = getMember(memberId);
+  var pc     = getPillarColor(m.pillarId);
+  var existing = getAssessment(weekK, memberId) || {};
+  var scores = existing.scores || {};
+  var realKpi = memberWeekKPIs(memberId, weekK);
+
+  // Real KPIs strip
+  var kpiHtml = '<div class="aval-real-kpi">'
+    + '<div class="aval-real-kpi-item"><div class="aval-real-kpi-val" style="color:var(--accent)">' + realKpi.total + '</div><div class="aval-real-kpi-lbl">Entregas</div></div>'
+    + '<div class="aval-real-kpi-item"><div class="aval-real-kpi-val" style="color:var(--green)">' + realKpi.done + '</div><div class="aval-real-kpi-lbl">Entregues</div></div>'
+    + '<div class="aval-real-kpi-item"><div class="aval-real-kpi-val" style="color:var(--yellow)">' + realKpi.partial + '</div><div class="aval-real-kpi-lbl">Parciais</div></div>'
+    + '<div class="aval-real-kpi-item"><div class="aval-real-kpi-val" style="color:var(--red)">' + realKpi.missed + '</div><div class="aval-real-kpi-lbl">Perdidas</div></div>'
+    + (realKpi.rate !== null ? '<div class="aval-real-kpi-item"><div class="aval-real-kpi-val" style="color:' + (realKpi.rate>=90?'var(--green)':realKpi.rate>=70?'var(--yellow)':'var(--red)') + '">' + realKpi.rate + '%</div><div class="aval-real-kpi-lbl">Taxa</div></div>' : '')
+    + '</div>';
+
+  // Criteria scores
+  var criteriaHtml = '';
+  AVAL_CRITERIA.forEach(function(c) {
+    var val = scores[c.id] || 0;
+    var starsHtml = '';
+    for (var i=1;i<=5;i++) {
+      starsHtml += '<span class="aval-star ' + (i<=val?'active':'') + '" '
+        + 'onclick="setAvalStar(' + JSON.stringify(c.id) + ',' + i + ',this.parentElement)">'
+        + (i<=val?'⭐':'☆') + '</span>';
+    }
+    criteriaHtml += '<div class="aval-modal-section">'
+      + '<div class="aval-modal-label">' + c.icon + ' ' + c.label + '</div>'
+      + '<div class="aval-star-row" data-crit="' + c.id + '">' + starsHtml + '</div>'
+      + '</div>';
+  });
+
+  var body = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;font-family:JetBrains Mono,monospace">' + weekK + '</div>'
+    + '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;letter-spacing:.04em">DADOS REAIS DA SEMANA</div>'
+    + kpiHtml
+    + '<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;letter-spacing:.04em">AUTOPERCEPÇÃO DO COLABORADOR</div>'
+    + criteriaHtml
+    + '<div class="fg" style="margin-bottom:10px"><label class="flbl">O que eu faria diferente esta semana</label>'
+    + '<textarea class="fi" id="aval-retro" rows="2" style="resize:vertical" placeholder="Reflexão livre...">' + escHtml(existing.notes||'') + '</textarea></div>'
+    + '<div class="fg"><label class="flbl">Compromisso para semana que vem</label>'
+    + '<textarea class="fi" id="aval-commit" rows="2" style="resize:vertical" placeholder="Foco e prioridade da próxima semana...">' + escHtml(existing.commitment||'') + '</textarea></div>';
+
+  var foot = '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    + '<button class="btn btn-p" onclick="submitAvalModal(' + JSON.stringify(memberId) + ',' + JSON.stringify(weekK) + ')">✓ Salvar</button>';
+
+  openModal({ title: m.name + ' · Autoavaliação', body, foot, size:'md' });
+}
+
+// Helper called by star onclick
+function setAvalStar(critId, val, container) {
+  var stars = container.querySelectorAll('.aval-star');
+  stars.forEach(function(s,i) {
+    s.textContent = i < val ? '⭐' : '☆';
+    if (i < val) s.classList.add('active'); else s.classList.remove('active');
+  });
+}
+
+// Submit assessment modal
+function submitAvalModal(memberId, weekK) {
+  var scores = {};
+  AVAL_CRITERIA.forEach(function(c) {
+    var row = document.querySelector('.aval-star-row[data-crit="' + c.id + '"]');
+    if (!row) return;
+    var active = row.querySelectorAll('.aval-star.active').length;
+    scores[c.id] = active;
+  });
+  var notes      = document.getElementById('aval-retro')?.value.trim()  || '';
+  var commitment = document.getElementById('aval-commit')?.value.trim() || '';
+  saveAssessment(weekK, memberId, { scores, notes, commitment });
+  toast('✅ Autoavaliação salva — ' + getMember(memberId).name.split(' ')[0], 'green');
+  closeModal();
+  if (view === 'avaliacoes') renderAvaliacoes();
+}
+
+// Toggle último dia útil mode
+function toggleLastWorkday() {
+  S.lastWorkdayMode = !S.lastWorkdayMode;
+  save();
+  updateAvalBadge();
+  render(); // re-render ritual to show/hide assessment banner
+  toast(S.lastWorkdayMode ? '🗓 Modo último dia útil ativado' : '🗓 Modo desativado', 'blue');
+}
+
+
+// ═══════════════════════════════════════════════════
+// RENDER: AUTOAVALIAÇÕES
+// ═══════════════════════════════════════════════════
+function renderAvaliacoes() {
+  destroyCharts();
+  const wk      = weekKey(today());
+  const allWeeks = Object.keys(S.assessments||{}).sort().reverse();
+  const members  = S.team.filter(m => m.active);
+
+  // Score color
+  function scoreColor(s) {
+    if (!s) return 'var(--text-muted)';
+    var v = parseFloat(s);
+    return v >= 4 ? 'var(--green)' : v >= 3 ? 'var(--yellow)' : 'var(--red)';
+  }
+
+  // Score badge
+  function scoreBadge(s, label) {
+    var color = scoreColor(s);
+    return '<div class="aval-score-pill" style="background:' + color + '18;color:' + color + '">'
+      + (s || '—') + (label ? ' ' + label : '') + '</div>';
+  }
+
+  // Build week section
+  function buildWeekSection(weekK, expanded) {
+    var wkAssess = (S.assessments||{})[weekK] || {};
+    var filled   = Object.keys(wkAssess).length;
+    var total    = members.length;
+    var weekAvg  = null;
+    var allScores = [];
+    Object.values(wkAssess).forEach(function(a) {
+      var avg = avgScore(a);
+      if (avg) allScores.push(parseFloat(avg));
+    });
+    if (allScores.length) weekAvg = (allScores.reduce(function(a,b){return a+b;},0)/allScores.length).toFixed(1);
+
+    var hdrHtml = '<div class="aval-week-hdr" onclick="toggleWeekSection(' + JSON.stringify(weekK) + ')">'
+      + '<div><div class="aval-week-title">' + weekK
+        + (weekK===wk ? ' <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(99,102,241,.12);color:#6366f1;font-family:JetBrains Mono,monospace">Semana atual</span>' : '')
+      + '</div>'
+      + '<div class="aval-week-meta">' + filled + '/' + total + ' preenchidas'
+        + (weekAvg ? ' · Média geral: <strong style="color:' + scoreColor(weekAvg) + '">' + weekAvg + '</strong>' : '')
+      + '</div></div>'
+      + '<div style="display:flex;align-items:center;gap:8px">'
+        + '<button class="btn btn-p btn-sm" onclick="event.stopPropagation();openNextPending(\'' + weekK + '\')">+ Preencher em lote</button>'
+        + '<span style="color:var(--text-muted);font-size:16px">' + (expanded?'▲':'▼') + '</span>'
+      + '</div>'
+      + '</div>';
+
+    if (!expanded) return hdrHtml;
+
+    // Member rows
+    var membersHtml = '';
+    members.forEach(function(m) {
+      var aval    = wkAssess[m.id] || null;
+      var avg     = avgScore(aval);
+      var pc      = getPillarColor(m.pillarId);
+      var kpi     = memberWeekKPIs(m.id, weekK);
+      var rateColor = kpi.rate!==null ? (kpi.rate>=90?'var(--green)':kpi.rate>=70?'var(--yellow)':'var(--red)') : 'var(--text-muted)';
+      var scoreChips = '';
+      if (aval && aval.scores) {
+        AVAL_CRITERIA.forEach(function(c) {
+          var v = aval.scores[c.id];
+          if (v) scoreChips += '<span class="aval-score-pill" style="background:' + scoreColor(v) + '18;color:' + scoreColor(v) + ';font-size:9px">' + c.icon + ' ' + v + '</span>';
+        });
+      }
+
+      membersHtml += '<div class="aval-member-row" onclick="openAvalModal(' + JSON.stringify(m.id) + ',' + JSON.stringify(weekK) + ')">'
+        + renderAvatar(m.id, 32, 11)
+        + '<div style="flex:1;min-width:0">'
+          + '<div style="font-size:13px;font-weight:500">' + escHtml(m.name) + '</div>'
+          + '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">'
+            + '<span style="font-size:10px;color:' + pc + '">' + getPillarLabel(m.pillarId) + '</span>'
+            + (kpi.rate !== null ? '<span style="font-family:JetBrains Mono,monospace;font-size:10px;color:' + rateColor + '">' + kpi.rate + '% entrega</span>' : '')
+          + '</div>'
+        + '</div>'
+        + (aval
+          ? '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">'
+              + '<div style="font-family:JetBrains Mono,monospace;font-size:20px;font-weight:800;color:' + scoreColor(avg) + '">' + avg + '</div>'
+              + '<div class="aval-score-pills">' + scoreChips + '</div>'
+            + '</div>'
+          : '<span style="font-size:11px;color:var(--text-muted);font-style:italic">Não preenchido</span>'
+        )
+        + '</div>';
+
+      // Show notes/commitment if filled
+      if (aval && (aval.notes || aval.commitment)) {
+        membersHtml += '<div style="background:var(--bg-hover);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px;margin-top:-4px;border-left:3px solid ' + scoreColor(avg) + '">';
+        if (aval.notes)      membersHtml += '<div style="font-size:12px;margin-bottom:4px"><strong>↩ Reflexão:</strong> ' + escHtml(aval.notes) + '</div>';
+        if (aval.commitment) membersHtml += '<div style="font-size:12px"><strong>→ Compromisso:</strong> ' + escHtml(aval.commitment) + '</div>';
+        membersHtml += '</div>';
+      }
+    });
+
+    return hdrHtml + '<div id="week-section-' + weekK.replace(/[^a-z0-9]/gi,'') + '">' + membersHtml + '</div>';
+  }
+
+  var html = '<div class="sec-hd">'
+    + '<div class="sec-title">⭐ Autoavaliações Semanais</div>'
+    + '<div class="sec-actions" style="gap:8px">'
+    + '<button class="btn ' + (S.lastWorkdayMode?'btn-p':'btn-s') + ' btn-sm" onclick="toggleLastWorkday()">'
+    + (S.lastWorkdayMode?'🗓 Modo ativo':'🗓 Último dia útil') + '</button>'
+    + '</div></div>';
+
+  // Current week always shown expanded
+  html += buildWeekSection(wk, true);
+
+  // Past weeks collapsed by default
+  var pastWeeks = allWeeks.filter(function(w){ return w !== wk; });
+  if (pastWeeks.length) {
+    html += '<div style="font-family:JetBrains Mono,monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin:20px 0 10px;display:flex;align-items:center;gap:10px">Semanas anteriores <span style="flex:1;height:1px;background:var(--border);display:block"></span></div>';
+    pastWeeks.forEach(function(wk2) { html += buildWeekSection(wk2, false); });
+  } else if (!allWeeks.length) {
+    html += '<div style="color:var(--text-muted);font-size:13px;padding:16px 0">Nenhuma avaliação anterior registrada.</div>';
+  }
+
+  document.getElementById('content').innerHTML = html;
+}
+
+// Toggle week section expand/collapse
+var _expandedWeeks = {};
+
+function openNextPending(weekK) {
+  var members = S.team.filter(function(m){ return m.active; });
+  var pending = members.filter(function(m){ return !getAssessment(weekK, m.id); });
+  if (!pending.length) { toast('Todas as avaliações desta semana já foram preenchidas!', 'green'); return; }
+  openAvalModal(pending[0].id, weekK);
+}
+function toggleWeekSection(weekK) {
+  _expandedWeeks[weekK] = !_expandedWeeks[weekK];
+  // Re-render just the section or full view
+  if (view === 'avaliacoes') renderAvaliacoes();
+}
+
 function setView(v){
   view=v;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.view===v));
@@ -4930,6 +5280,7 @@ function render(){
     case 'weekly':   renderWeekly(); break;
     case 'longterm':  renderLongterm(); break;
     case 'kanban':    renderKanban(); break;
+    case 'avaliacoes': renderAvaliacoes(); break;
     case 'metrics':  renderMetrics(); break;
     case 'executive':renderExecutive(); break;
     case 'team':     renderTeam(); break;
