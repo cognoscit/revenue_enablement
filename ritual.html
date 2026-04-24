@@ -933,8 +933,8 @@ function loadSeedIfNeeded() {
 // ═══════════════════════════════════════════════════
 // ⚙️  SUPABASE CONFIG — preencher antes de publicar
 // ═══════════════════════════════════════════════════
-const SB_URL     = "https://dlsumchrteigmuumpeke.supabase.co";   // ex: "https://xyzxyz.supabase.co"
-const SB_KEY     = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsc3VtY2hydGVpZ211dW1wZWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNDE3MjgsImV4cCI6MjA5MjYxNzcyOH0.1JCPBodkrVjbH3dYz9kbWjfKil8suhYNb4R2L3fxRFM";   // anon public key (eyJ...)
+const SB_URL     = "";   // ex: "https://xyzxyz.supabase.co"
+const SB_KEY     = "";   // anon public key (eyJ...)
 const SB_ROW_ID  = "main";
 const SB_TABLE   = "rg_sdm_state";
 
@@ -5342,9 +5342,14 @@ function setCurrentUser(memberId) {
   if (!m) return;
   var identity = { memberId: m.id, name: m.name, setAt: new Date().toISOString() };
   localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
-  updateIdentityHeader();
-  // Log the login
-  appendActivityLog({ action: "login", actor: m.name, memberId: m.id });
+  closeModal();
+  // Wait for modal DOM removal before re-render
+  setTimeout(function() {
+    updateIdentityHeader();
+    render();
+    appendActivityLog({ action: "login", actor: m.name, memberId: m.id });
+    toast("Bem-vindo, " + m.name.split(" ")[0] + "!", "green");
+  }, 80);
 }
 function clearCurrentUser() {
   localStorage.removeItem(IDENTITY_KEY);
@@ -5367,9 +5372,20 @@ function updateIdentityHeader() {
   if (cur) {
     var m   = S.team.find(function(t){ return t.id === cur.memberId; });
     var pc  = m ? getPillarColor(m.pillarId) : "#6b7280";
+    // Triple-click to change identity (hidden from casual users)
     el.innerHTML = renderAvatar(cur.memberId, 22, 8)
-      + '<span style="font-size:11px;font-weight:500;margin-left:4px">' + (cur.name.split(" ")[0]) + '</span>'
-      + '<button onclick="event.stopPropagation();showIdentityModal()" style="margin-left:4px;background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-muted)" title="Trocar usuário">▾</button>';
+      + '<span style="font-size:11px;font-weight:500;margin-left:5px">' + (cur.name.split(" ")[0]) + '</span>';
+    el.title = "Clique 3x para trocar identidade";
+    el.setAttribute("data-clicks","0");
+    el.setAttribute("data-click-timer","0");
+    el.onclick = function() {
+      var clicks = parseInt(el.getAttribute("data-clicks")||"0") + 1;
+      el.setAttribute("data-clicks", clicks);
+      clearTimeout(parseInt(el.getAttribute("data-click-timer")||"0"));
+      var t = setTimeout(function(){ el.setAttribute("data-clicks","0"); }, 600);
+      el.setAttribute("data-click-timer", t);
+      if (clicks >= 3) { el.setAttribute("data-clicks","0"); showIdentityModal(false); }
+    };
     el.style.borderColor = pc + "44";
     el.style.background  = pc + "10";
   } else {
@@ -5380,44 +5396,126 @@ function updateIdentityHeader() {
 }
 
 // Show identity selection modal
+// Cache for identity selection
+var _identitySelectCache = {};
+
+// Cache for identity selection
+var _identitySelectCache = {};
+
+function _pickIdentity(ckey) {
+  var mid = _identitySelectCache[ckey];
+  if (mid) setCurrentUser(mid);
+}
+
 function showIdentityModal(force) {
   var cur     = getCurrentUser();
   var members = S.team.filter(function(m){ return m.active; });
-  var body    = '<div style="margin-bottom:14px;font-size:13px;color:var(--text-secondary)">Selecione seu nome para que suas ações sejam registradas corretamente.</div>'
+  var body    = '<div style="margin-bottom:14px;font-size:13px;color:var(--text-secondary)">Selecione seu nome. Suas ações ficarão registradas.</div>'
     + '<div style="display:flex;flex-direction:column;gap:6px;max-height:380px;overflow-y:auto;">';
 
   members.forEach(function(m) {
     var pc   = getPillarColor(m.pillarId);
     var isMe = cur && cur.memberId === m.id;
-    var bg   = isMe ? pc + '10' : 'var(--bg-card)';
-    var bdr  = isMe ? pc : 'var(--border)';
-    body += '<div class="identity-row" onclick="setCurrentUser(' + JSON.stringify(m.id) + ');closeModal();render()" '
-      + 'style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius);border:1px solid '
-      + bdr + ';background:' + bg + ';cursor:pointer">'
+    var ckey = "id_" + m.id.replace(/[^a-z0-9]/gi,"_");
+    _identitySelectCache[ckey] = m.id;
+    body += '<button type="button" data-ckey="' + ckey + '" '
+      + 'onclick="_pickIdentity(this.dataset.ckey)" '
+      + 'style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius);border:2px solid '
+      + (isMe ? pc : 'var(--border)') + ';background:' + (isMe ? pc + '10' : 'var(--bg-card)') + ';cursor:pointer;width:100%;text-align:left;transition:border-color .15s">'
       + renderAvatar(m.id, 36, 13)
-      + '<div style="flex:1"><div style="font-weight:600">' + escHtml(m.name)
-        + (isMe ? ' <span style="font-size:10px;color:' + pc + '">● você</span>' : '')
+      + '<div style="flex:1;min-width:0">'
+        + '<div style="font-weight:600;font-size:14px">' + escHtml(m.name)
+          + (isMe ? ' <span style="font-size:10px;color:' + pc + '">● você</span>' : '')
+        + '</div>'
+        + '<div style="font-size:11px;color:' + pc + '">' + escHtml(getPillarLabel(m.pillarId)) + '</div>'
       + '</div>'
-      + '<div style="font-size:11px;color:' + pc + '">' + escHtml(getPillarLabel(m.pillarId)) + '</div></div>'
-      + (isMe ? '<span style="font-size:18px;color:var(--green)">✓</span>' : '')
-      + '</div>';
+      + (isMe ? '<span style="font-size:20px;color:var(--green)">✓</span>' : '<span style="font-size:13px;color:var(--text-muted)">→</span>')
+      + '</button>';
   });
 
   body += '</div>';
-  var foot = (cur && !force)
+  var foot = (!force && cur)
     ? '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
-      + '<button class="btn btn-d btn-sm" onclick="clearCurrentUser();closeModal();render()">Sair</button>'
     : '';
-  openModal({ title: '👤 Quem está usando?', body: body, foot: foot });
+  openModal({ title: '👤 Identificação', body: body, foot: foot });
+
+  if (force) {
+    setTimeout(function() {
+      var overlay = document.getElementById('modal-overlay') || document.querySelector('.modal-overlay');
+      if (overlay) overlay.onclick = function(e){ e.stopPropagation(); };
+      // Hide X close button if present
+      var xbtn = document.querySelector('.mclose,.modal-x,[onclick*="closeModal"]');
+      if (xbtn && xbtn.tagName !== 'BUTTON') xbtn.style.display = 'none';
+    }, 50);
+  }
 }
 // Check on startup — show identity modal if not identified
 function checkIdentityOnLoad() {
   var cur = getCurrentUser();
-  if (!cur || !S.team.find(function(m){ return m.id===cur.memberId&&m.active; })) {
-    // Slight delay so the app renders first
-    setTimeout(function(){ showIdentityModal(true); }, 600);
+  var validMember = cur && S.team.find(function(m){ return m.id===cur.memberId && m.active; });
+  if (!validMember) {
+    // Block interaction until identified
+    setTimeout(function(){ showIdentityModal(true); }, 400);
   } else {
     updateIdentityHeader();
+  }
+}
+
+
+// ═══════════════════════════════════════════════════
+// SETTINGS PASSWORD GATE
+// ═══════════════════════════════════════════════════
+const SETTINGS_PWD_KEY = "rg_settings_unlocked";
+const SETTINGS_PWD     = "M@theusGBS785";
+
+function isSettingsUnlocked() {
+  return sessionStorage.getItem(SETTINGS_PWD_KEY) === "1";
+}
+function unlockSettings() {
+  sessionStorage.setItem(SETTINGS_PWD_KEY, "1");
+}
+function lockSettings() {
+  sessionStorage.removeItem(SETTINGS_PWD_KEY);
+}
+
+function requestSettingsAccess(callback) {
+  if (isSettingsUnlocked()) { callback(); return; }
+  var body = '<div style="text-align:center;padding:10px 0 20px">'
+    + '<div style="font-size:36px;margin-bottom:12px">🔒</div>'
+    + '<div style="font-size:14px;font-weight:600;margin-bottom:16px">Acesso restrito ao administrador</div>'
+    + '<div class="fg"><label class="flbl">Senha</label>'
+    + '<input class="fi" id="settings-pwd-input" type="password" placeholder="••••••••••" autofocus'
+    + ' id="settings-pwd-input" data-target="settings-pwd-submit">'
+    + '</div></div>';
+  var foot = '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    + '<button class="btn btn-p" id="settings-pwd-submit" onclick="checkSettingsPwd()">Entrar</button>';
+  openModal({ title: "🔐 Configurações", body: body, foot: foot });
+  setTimeout(function(){ var el=document.getElementById("settings-pwd-input"); if(el) el.focus(); }, 100);
+  // Store callback for after auth
+  window._settingsCallback = callback;
+}
+
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    var input = document.getElementById('settings-pwd-input');
+    if (input && document.activeElement === input) {
+      checkSettingsPwd();
+    }
+  }
+});
+function checkSettingsPwd() {
+  var input = document.getElementById("settings-pwd-input");
+  if (!input) return;
+  if (input.value === SETTINGS_PWD) {
+    unlockSettings();
+    closeModal();
+    if (window._settingsCallback) { window._settingsCallback(); window._settingsCallback = null; }
+  } else {
+    input.value = "";
+    input.placeholder = "Senha incorreta — tente novamente";
+    input.style.borderColor = "var(--red)";
+    setTimeout(function(){ input.placeholder="••••••••••"; input.style.borderColor=""; }, 2000);
   }
 }
 
