@@ -933,8 +933,8 @@ function loadSeedIfNeeded() {
 // ═══════════════════════════════════════════════════
 // ⚙️  SUPABASE CONFIG — preencher antes de publicar
 // ═══════════════════════════════════════════════════
-const SB_URL     = "https://dlsumchrteigmuumpeke.supabase.co";   // ex: "https://xyzxyz.supabase.co"
-const SB_KEY     = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsc3VtY2hydGVpZ211dW1wZWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNDE3MjgsImV4cCI6MjA5MjYxNzcyOH0.1JCPBodkrVjbH3dYz9kbWjfKil8suhYNb4R2L3fxRFM";   // anon public key (eyJ...)
+const SB_URL     = "";   // ex: "https://xyzxyz.supabase.co"
+const SB_KEY     = "";   // anon public key (eyJ...)
 const SB_ROW_ID  = "main";
 const SB_TABLE   = "rg_sdm_state";
 
@@ -1979,13 +1979,14 @@ function renderGroup(memberId, items, dateStr, isApuracao) {
   const wk_=weekKey(dateStr);
   const aval_=getAssessment(wk_,memberId);
   const avg_=aval_?avgScore(aval_):null;
-  const avalTip=S.lastWorkdayMode?(avg_?('Avaliação: '+avg_+'/5'):'Clique para avaliar'):'';
-  const avalClick=S.lastWorkdayMode?'onclick="openAvalModal('+JSON.stringify(memberId)+','+JSON.stringify(wk_)+')"':'';
+  const avalCacheKey='av_'+(memberId||'').replace(/[^a-z0-9]/gi,'_');
+  if(!window._avalCache) window._avalCache={};
+  window._avalCache[avalCacheKey]={memberId,wk_};
   const avalChip=S.lastWorkdayMode
-    ?`<div class="g-aval" ${avalClick} title="${avalTip}" style="cursor:${S.lastWorkdayMode?'pointer':'default'}">`
-      +(avg_?`<span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${avg_>=4?'var(--green)':avg_>=3?'var(--yellow)':'var(--red)'}">${avg_}⭐</span>`
-             :`<span style="font-size:11px;color:var(--text-muted)" title="Clique para avaliar">☆</span>`)
-      +'</div>'
+    ?('<div class="g-aval" onclick="_openAvalFromCache(\'' + avalCacheKey + '\')" title="'+(avg_?'Avaliação: '+avg_+'/5':'Clique para avaliar')+'" style="cursor:pointer">'
+      +(avg_?('<span style="font-family:JetBrains Mono,monospace;font-size:11px;font-weight:700;color:'+(avg_>=4?'var(--green)':avg_>=3?'var(--yellow)':'var(--red)')+'">'+avg_+'⭐</span>')
+            :'<span style="font-size:11px;color:var(--text-muted)">☆ avaliar</span>')
+      +'</div>')
     :'';
 
   let html=`<div class="del-group">
@@ -3814,10 +3815,19 @@ function submitDel(dateStr,editId){
   closeModal();
   if(wasEdit && view==='ritual'){
     setTimeout(function(){
+      // Include virtual recurring items — they are valid pending items in the panel
       var nextPending=getEffectiveDels(panelDate).filter(function(d){
-        return d.status==='pending'&&!d._skipMarker&&!d._virtual&&d.id!==editId;
+        return d.status==='pending'&&!d._skipMarker&&d.id!==editId;
       });
-      if(nextPending.length>0) openEditDel(panelDate, nextPending[0].id);
+      if(!nextPending.length) return;
+      var next=nextPending[0];
+      if(next._virtual){
+        // Materialize before editing
+        var realId=materializeVirtual(panelDate,next);
+        if(realId) setTimeout(function(){ openEditDel(panelDate,realId); },80);
+      } else {
+        openEditDel(panelDate,next.id);
+      }
     },150);
   }
 }
@@ -5402,6 +5412,11 @@ var _identitySelectCache = {};
 // Cache for identity selection
 var _identitySelectCache = {};
 
+function _openAvalFromCache(k) {
+  var c=window._avalCache&&window._avalCache[k];
+  if(c) openAvalModal(c.memberId, c.wk_);
+}
+
 function _pickIdentity(ckey) {
   var mid = _identitySelectCache[ckey];
   if (mid) setCurrentUser(mid);
@@ -5520,6 +5535,15 @@ function checkSettingsPwd() {
 }
 
 function setView(v){
+  // Password-protect admin views
+  var adminViews=['settings','team','kpis'];
+  if(adminViews.includes(v)&&!isSettingsUnlocked()){
+    requestSettingsAccess(function(){ _doSetView(v); });
+    return;
+  }
+  _doSetView(v);
+}
+function _doSetView(v){
   view=v;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.view===v));
   document.getElementById('view-title').textContent=TITLES[v]||v;
