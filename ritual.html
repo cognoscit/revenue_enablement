@@ -771,7 +771,8 @@ body {
       <button class="dnav-btn" onclick="navDate(1)">›</button>
       <button class="today-btn" onclick="goToday()">HOJE</button>
     </div>
-    <div class="od-indicator od-disconnected" id="od-indicator" onclick="setView('settings')" title="Clique para configurar Supabase">☁ Supabase</div>
+    <div id="identity-chip" onclick="showIdentityModal()" style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:99px;border:1px solid var(--border);cursor:pointer;user-select:none;transition:all .2s;white-space:nowrap"><span style="font-size:11px;color:var(--text-muted)">Identificar-se →</span></div>
+<div class="od-indicator od-disconnected" id="od-indicator" onclick="setView('settings')" title="Clique para configurar Supabase">☁ Supabase</div>
 <button class="header-print-btn" onclick="window.print()" title="Imprimir ritual" id="print-btn">🖨</button>
     <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn" title="Alternar tema">🌙</button>
   </div>
@@ -864,7 +865,8 @@ function defaultState() {
     days: {},
     recurring: [],
     holidays: {},
-    assessments: {},  // { 'YYYY-WXX': { memberId: { scores:{}, notes:'', commitment:'', updatedAt:'' } } }
+    assessments: {},
+    activityLog: [],  // [{ ts, action, actor, memberId, detail }]
     lastWorkdayMode: false,  // toggle: último dia útil da semana
     templates: [],
     kpis: [
@@ -928,29 +930,22 @@ function loadSeedIfNeeded() {
 // ═══════════════════════════════════════════════════
 // SUPABASE — SINCRONIZAÇÃO AUTOMÁTICA
 // ═══════════════════════════════════════════════════
-const SB_ROW_ID  = "main";            // ID do registro único na tabela
+// ═══════════════════════════════════════════════════
+// ⚙️  SUPABASE CONFIG — preencher antes de publicar
+// ═══════════════════════════════════════════════════
+const SB_URL     = "";   // ex: "https://xyzxyz.supabase.co"
+const SB_KEY     = "";   // anon public key (eyJ...)
+const SB_ROW_ID  = "main";
 const SB_TABLE   = "rg_sdm_state";
-const SB_CFG_KEY = "rg_sb_config";    // localStorage key para url+key
 
 let _syncTimer = null;
 
-// Config helpers — url e anon key ficam em localStorage
-function sbCfgGet() {
-  try { return JSON.parse(localStorage.getItem(SB_CFG_KEY)||"{}"); } catch(e) { return {}; }
-}
-function sbCfgSet(cfg) { localStorage.setItem(SB_CFG_KEY, JSON.stringify(cfg)); }
-function sbReady() { var c=sbCfgGet(); return !!(c.url && c.key); }
-
-// Supabase REST endpoint
-function sbUrl() {
-  var c=sbCfgGet();
-  return (c.url||"").replace(/\/+$/,"") + "/rest/v1/" + SB_TABLE;
-}
+function sbReady() { return !!(SB_URL && SB_KEY); }
+function sbUrl()   { return SB_URL.replace(/\/+$/, "") + "/rest/v1/" + SB_TABLE; }
 function sbHeaders() {
-  var c=sbCfgGet();
   return {
-    "apikey":        c.key||"",
-    "Authorization": "Bearer " + (c.key||""),
+    "apikey":        SB_KEY,
+    "Authorization": "Bearer " + SB_KEY,
     "Content-Type":  "application/json",
     "Prefer":        "return=minimal"
   };
@@ -1007,61 +1002,40 @@ async function pullFromOneDrive() {
 }
 
 // ── TESTAR E CONECTAR (Settings) ──
+// Manual sync trigger (from settings or header)
 async function odLogin() {
-  var url = (document.getElementById("sb-url")||{}).value||"";
-  var key = (document.getElementById("sb-key")||{}).value||"";
-  if (!url || !key) { toast("Preencha a URL e a anon key", "red"); return; }
-  sbCfgSet({ url: url.trim(), key: key.trim() });
+  if (!sbReady()) { toast("Configure SB_URL e SB_KEY no código", "red"); return; }
   setOdStatus("syncing");
-  try {
-    // Test: fetch row (even if empty, 200 = connected)
-    var r = await fetch(
-      sbUrl() + "?id=eq." + SB_ROW_ID + "&select=id",
-      { headers: sbHeaders() }
-    );
-    if (!r.ok) {
-      setOdStatus("error", "HTTP " + r.status + " — verifique URL e anon key");
-      toast("❌ Conexão falhou (HTTP " + r.status + ")", "red");
-      return;
-    }
-    var rows = await r.json();
-    if (S.settings) S.settings.msUserName = "supabase";
-    if (!rows.length) {
-      // Row doesn't exist yet — push current state
-      var ok = await pushToOneDrive();
-      if (ok) { save(); toast("✅ Conectado ao Supabase — dados enviados!", "green"); renderSettings(); }
-    } else {
-      // Row exists — pull and load
-      var remote = await pullFromOneDrive();
-      if (remote) {
-        S = remote;
-        if (!S.pillars)   S.pillars   = defaultState().pillars;
-        if (!S.templates) S.templates = [];
-        if (!S.recurring) S.recurring = [];
-        if (!S.holidays)  S.holidays  = {};
-        if (!S.assessments) S.assessments = {};
-        migrateRecurring();
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
-        applyTheme(); renderSidebar(); render();
-        toast("✅ Conectado — dados carregados do Supabase!", "green");
-        renderSettings();
-      }
-      setOdStatus("synced", "Conectado ao Supabase");
-    }
-  } catch(e) { setOdStatus("error", e.message); toast("❌ Erro: " + e.message, "red"); }
+  var remote = await pullFromOneDrive();
+  if (remote) {
+    S = remote;
+    if (!S.pillars)     S.pillars     = defaultState().pillars;
+    if (!S.templates)   S.templates   = [];
+    if (!S.recurring)   S.recurring   = [];
+    if (!S.holidays)    S.holidays    = {};
+    if (!S.assessments) S.assessments = {};
+    migrateRecurring();
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
+    applyTheme(); renderSidebar(); render();
+    setOdStatus("synced", "Sincronizado: " + new Date().toLocaleTimeString("pt-BR"));
+    toast("✅ Sincronizado com Supabase!", "green");
+  } else {
+    await pushToOneDrive();
+    setOdStatus("synced");
+    toast("✅ Dados enviados ao Supabase", "green");
+  }
 }
 
 function odLogout() {
-  sbCfgSet({});
-  if (S.settings) S.settings.msUserName = "";
   setOdStatus("disconnected");
-  save();
-  toast("Desconectado do Supabase", "yellow");
-  renderSettings();
+  toast("Sync suspenso", "yellow");
 }
 
 // ── SAVE: localStorage imediato + Supabase debounced ──
 function save() {
+  // Tag with current user for audit
+  var cur = getCurrentUser();
+  if (cur) { S._lastEditedBy = cur.name; S._lastEditedAt = new Date().toISOString(); }
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
   if (sbReady()) {
     clearTimeout(_syncTimer);
@@ -1088,6 +1062,7 @@ async function load() {
     if (!S.assessments) S.assessments = {};
     if (S.lastWorkdayMode === undefined) S.lastWorkdayMode = false;
     if (!sbReady()) loadSeedIfNeeded();
+    setTimeout(checkIdentityOnLoad, 700);
     migrateRecurring();
   } catch(e) { S = defaultState(); }
 
@@ -1111,6 +1086,7 @@ async function load() {
         try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
         applyTheme(); renderSidebar(); render();
         setOdStatus("synced", "Do Supabase: " + new Date().toLocaleTimeString("pt-BR"));
+        checkIdentityOnLoad();
       } else {
         await pushToOneDrive();
         setOdStatus("synced", "Sync: " + new Date().toLocaleTimeString("pt-BR"));
@@ -3035,41 +3011,34 @@ function renderSettings() {
   <div class="settings-card" style="border-color:rgba(16,185,129,.3)">
     <div class="scrd-title" style="color:var(--green)">☁ Supabase — Sincronização Automática</div>
     <div class="srow" style="flex-direction:column;align-items:flex-start;gap:12px;padding:16px">
+
       <div style="font-size:13px;color:var(--text-secondary);line-height:1.7;margin-bottom:12px">
-        Dados salvos automaticamente no Supabase a cada alteração. Funciona em qualquer dispositivo sem token exposto.
-        <br><span style="font-size:11px">Configure em <a href="https://supabase.com/dashboard" target="_blank" style="color:var(--accent)">supabase.com/dashboard</a>
-        → Settings → API → copie a <strong>Project URL</strong> e a <strong>anon public key</strong>.</span>
+        Dados sincronizados automaticamente a cada alteração. As credenciais estão embutidas no código.
       </div>
-      <div class="fg" style="width:100%;max-width:520px">
-        <label class="flbl">Project URL</label>
-        <input class="fi" id="sb-url" placeholder="https://xxxxxxxxxxxxxxxx.supabase.co"
-          value="${escHtml(sbCfgGet().url||'')}"
-          oninput="sbCfgSet({url:this.value.trim(),key:sbCfgGet().key||''})">
-      </div>
-      <div class="fg" style="width:100%;max-width:520px">
-        <label class="flbl">Anon Key (public)</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input class="fi" id="sb-key" type="password"
-            placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-            value="${escHtml(sbCfgGet().key||'')}"
-            style="flex:1;font-family:JetBrains Mono,monospace;font-size:11px"
-            oninput="sbCfgSet({url:sbCfgGet().url||'',key:this.value.trim()})">
-          <button class="btn btn-s btn-sm" onclick="var i=document.getElementById('sb-key');i.type=i.type==='password'?'text':'password'">👁</button>
-        </div>
-      </div>
-      <div style="font-size:11px;color:var(--text-muted)">
-        Tabela: <code style="background:var(--bg-hover);padding:1px 6px;border-radius:4px">rg_sdm_state</code>
-        &nbsp;·&nbsp; Registro: <code style="background:var(--bg-hover);padding:1px 6px;border-radius:4px">main</code>
+      <div style="font-size:12px;padding:10px 14px;border-radius:var(--radius);background:var(--bg-hover);font-family:JetBrains Mono,monospace;margin-bottom:12px">
+        ${sbReady()
+          ? '<span style="color:var(--green)">✓ Supabase configurado · '+SB_URL+'</span>'
+          : '<span style="color:var(--yellow)">⚠ SB_URL e SB_KEY não preenchidos no código</span>'}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-p btn-sm" onclick="odLogin()">🔑 Testar e Conectar</button>
-        <button class="btn btn-s btn-sm" onclick="pushToOneDrive().then(function(ok){if(ok)toast('Enviado ao Supabase','green')})">↑ Enviar agora</button>
-        <button class="btn btn-s btn-sm" onclick="pullFromOneDrive().then(function(d){if(d){S=d;save();render();toast('Carregado do Supabase','green');}else toast('Sem dados no Supabase','yellow')})">↓ Carregar agora</button>
-        <button class="btn btn-d btn-sm" onclick="odLogout()">Desconectar</button>
+        <button class="btn btn-s btn-sm" onclick="odLogin()">↻ Sincronizar agora</button>
+        <button class="btn btn-s btn-sm" onclick="pushToOneDrive().then(function(ok){if(ok)toast('Enviado ao Supabase','green')})">↑ Forçar envio</button>
+        <button class="btn btn-s btn-sm" onclick="pullFromOneDrive().then(function(d){if(d){S=d;save();render();toast('Carregado','green');}else toast('Sem dados','yellow')})">↓ Forçar download</button>
       </div>
-      ${sbReady()
-        ? '<div style="font-size:12px;color:var(--green);margin-top:4px">✓ Supabase configurado</div>'
-        : '<div style="font-size:12px;color:var(--yellow);margin-top:4px">⚠ Configure URL e anon key para ativar.</div>'}
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--text-secondary)">Usuário identificado neste browser</div>
+        ${(function(){
+          var cur=getCurrentUser();
+          if(!cur) return '<button class="btn btn-p btn-sm" onclick="showIdentityModal(true)">👤 Identificar-se</button>';
+          return '<div style="display:flex;align-items:center;gap:10px">'
+            + renderAvatar(cur.memberId,28,10)
+            + '<div><div style="font-size:13px;font-weight:600">'+escHtml(cur.name)+'</div>'
+            + '<div style="font-size:10px;color:var(--text-muted)">desde '+new Date(cur.setAt).toLocaleDateString("pt-BR")+'</div></div>'
+            + '<button class="btn btn-s btn-sm" onclick="showIdentityModal(false)">Trocar</button>'
+            + '<button class="btn btn-d btn-sm" onclick="clearCurrentUser();renderSettings()">Sair</button>'
+            + '</div>';
+        })()}
+      </div>
     
     </div>
   </div>
@@ -5357,6 +5326,99 @@ function toggleWeekSection(weekK) {
   _expandedWeeks[weekK] = !_expandedWeeks[weekK];
   // Re-render just the section or full view
   if (view === 'avaliacoes') renderAvaliacoes();
+}
+
+
+// ═══════════════════════════════════════════════════
+// IDENTIDADE — quem está usando este browser
+// ═══════════════════════════════════════════════════
+const IDENTITY_KEY = "rg_current_user";  // { memberId, name, setAt }
+
+function getCurrentUser() {
+  try { return JSON.parse(localStorage.getItem(IDENTITY_KEY)||"null"); } catch(e) { return null; }
+}
+function setCurrentUser(memberId) {
+  var m = S.team.find(function(t){ return t.id === memberId; });
+  if (!m) return;
+  var identity = { memberId: m.id, name: m.name, setAt: new Date().toISOString() };
+  localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+  updateIdentityHeader();
+  // Log the login
+  appendActivityLog({ action: "login", actor: m.name, memberId: m.id });
+}
+function clearCurrentUser() {
+  localStorage.removeItem(IDENTITY_KEY);
+  updateIdentityHeader();
+}
+
+// Lightweight activity log stored in S.activityLog (capped at 500 entries)
+function appendActivityLog(entry) {
+  if (!S.activityLog) S.activityLog = [];
+  S.activityLog.push(Object.assign({ ts: new Date().toISOString() }, entry));
+  if (S.activityLog.length > 500) S.activityLog = S.activityLog.slice(-500);
+  save();
+}
+
+// Update header chip showing current user
+function updateIdentityHeader() {
+  var el  = document.getElementById("identity-chip");
+  var cur = getCurrentUser();
+  if (!el) return;
+  if (cur) {
+    var m   = S.team.find(function(t){ return t.id === cur.memberId; });
+    var pc  = m ? getPillarColor(m.pillarId) : "#6b7280";
+    el.innerHTML = renderAvatar(cur.memberId, 22, 8)
+      + '<span style="font-size:11px;font-weight:500;margin-left:4px">' + (cur.name.split(" ")[0]) + '</span>'
+      + '<button onclick="event.stopPropagation();showIdentityModal()" style="margin-left:4px;background:none;border:none;cursor:pointer;font-size:10px;color:var(--text-muted)" title="Trocar usuário">▾</button>';
+    el.style.borderColor = pc + "44";
+    el.style.background  = pc + "10";
+  } else {
+    el.innerHTML = '<span style="font-size:11px;color:var(--text-muted)">Identificar-se →</span>';
+    el.style.borderColor = "var(--border)";
+    el.style.background  = "transparent";
+  }
+}
+
+// Show identity selection modal
+function showIdentityModal(force) {
+  var cur     = getCurrentUser();
+  var members = S.team.filter(function(m){ return m.active; });
+  var body    = '<div style="margin-bottom:14px;font-size:13px;color:var(--text-secondary)">Selecione seu nome para que suas ações sejam registradas corretamente.</div>'
+    + '<div style="display:flex;flex-direction:column;gap:6px;max-height:380px;overflow-y:auto;">';
+
+  members.forEach(function(m) {
+    var pc   = getPillarColor(m.pillarId);
+    var isMe = cur && cur.memberId === m.id;
+    var bg   = isMe ? pc + '10' : 'var(--bg-card)';
+    var bdr  = isMe ? pc : 'var(--border)';
+    body += '<div class="identity-row" onclick="setCurrentUser(' + JSON.stringify(m.id) + ');closeModal();render()" '
+      + 'style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius);border:1px solid '
+      + bdr + ';background:' + bg + ';cursor:pointer">'
+      + renderAvatar(m.id, 36, 13)
+      + '<div style="flex:1"><div style="font-weight:600">' + escHtml(m.name)
+        + (isMe ? ' <span style="font-size:10px;color:' + pc + '">● você</span>' : '')
+      + '</div>'
+      + '<div style="font-size:11px;color:' + pc + '">' + escHtml(getPillarLabel(m.pillarId)) + '</div></div>'
+      + (isMe ? '<span style="font-size:18px;color:var(--green)">✓</span>' : '')
+      + '</div>';
+  });
+
+  body += '</div>';
+  var foot = (cur && !force)
+    ? '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+      + '<button class="btn btn-d btn-sm" onclick="clearCurrentUser();closeModal();render()">Sair</button>'
+    : '';
+  openModal({ title: '👤 Quem está usando?', body: body, foot: foot });
+}
+// Check on startup — show identity modal if not identified
+function checkIdentityOnLoad() {
+  var cur = getCurrentUser();
+  if (!cur || !S.team.find(function(m){ return m.id===cur.memberId&&m.active; })) {
+    // Slight delay so the app renders first
+    setTimeout(function(){ showIdentityModal(true); }, 600);
+  } else {
+    updateIdentityHeader();
+  }
 }
 
 function setView(v){
