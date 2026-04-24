@@ -5171,9 +5171,13 @@ function openAvalModal(memberId, weekK) {
 
 // Helper called by star onclick
 function setAvalStar(critId, val, container) {
+  if (!container) return;
+  container.dataset.selected = String(val);
   var stars = container.querySelectorAll('.aval-star');
   stars.forEach(function(s,i) {
-    if (i < val) s.classList.add('active'); else s.classList.remove('active');
+    var active = i < val;
+    s.classList.toggle('active', active);
+    s.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
 }
 
@@ -5183,7 +5187,7 @@ function submitAvalModal(memberId, weekK) {
   AVAL_CRITERIA.forEach(function(c) {
     var row = document.querySelector('.aval-star-row[data-crit="' + c.id + '"]');
     if (!row) return;
-    var active = row.querySelectorAll('.aval-star.active').length;
+    var active = Number(row.dataset.selected || row.querySelectorAll('.aval-star.active').length || 0);
     scores[c.id] = active;
   });
   var notes      = document.getElementById('aval-retro')?.value.trim()  || '';
