@@ -5144,7 +5144,7 @@ function openAvalModal(memberId, weekK) {
     for (var i=1;i<=5;i++) {
       starsHtml += '<span class="aval-star ' + (i<=val?'active':'') + '" '
         + 'onclick="setAvalStar(' + JSON.stringify(c.id) + ',' + i + ',this.parentElement)">'
-        + (i<=val?'⭐':'☆') + '</span>';
+        + '★</span>';
     }
     criteriaHtml += '<div class="aval-modal-section">'
       + '<div class="aval-modal-label">' + c.icon + ' ' + c.label + '</div>'
@@ -5172,7 +5172,6 @@ function openAvalModal(memberId, weekK) {
 function setAvalStar(critId, val, container) {
   var stars = container.querySelectorAll('.aval-star');
   stars.forEach(function(s,i) {
-    s.textContent = i < val ? '⭐' : '☆';
     if (i < val) s.classList.add('active'); else s.classList.remove('active');
   });
 }
