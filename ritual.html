@@ -771,7 +771,7 @@ body {
       <button class="dnav-btn" onclick="navDate(1)">›</button>
       <button class="today-btn" onclick="goToday()">HOJE</button>
     </div>
-    <div class="od-indicator od-disconnected" id="od-indicator" onclick="setView('settings')" title="Clique para configurar GitHub Gist">☁ GitHub</div>
+    <div class="od-indicator od-disconnected" id="od-indicator" onclick="setView('settings')" title="Clique para configurar Supabase">☁ Supabase</div>
 <button class="header-print-btn" onclick="window.print()" title="Imprimir ritual" id="print-btn">🖨</button>
     <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn" title="Alternar tema">🌙</button>
   </div>
@@ -925,18 +925,46 @@ function loadSeedIfNeeded() {
 // ═══════════════════════════════════════════════════
 // GITHUB GIST — SINCRONIZAÇÃO AUTOMÁTICA
 // ═══════════════════════════════════════════════════
-const GIST_ID   = "c6cb127bea37e948d59c8c32889949aa";
-const GIST_FILE = "RG_SDM_data.json";
-const GIST_API  = "https://api.github.com/gists/" + GIST_ID;
-const GH_TK_KEY = "rg_gh_token";
+// ═══════════════════════════════════════════════════
+// SUPABASE — SINCRONIZAÇÃO AUTOMÁTICA
+// ═══════════════════════════════════════════════════
+const SB_ROW_ID  = "main";            // ID do registro único na tabela
+const SB_TABLE   = "rg_sdm_state";
+const SB_CFG_KEY = "rg_sb_config";    // localStorage key para url+key
 
 let _syncTimer = null;
 
-function ghTkGet()  { return localStorage.getItem(GH_TK_KEY) || ""; }
-function ghTkSet(t) { t ? localStorage.setItem(GH_TK_KEY,t) : localStorage.removeItem(GH_TK_KEY); }
+// Config helpers — url e anon key ficam em localStorage
+function sbCfgGet() {
+  try { return JSON.parse(localStorage.getItem(SB_CFG_KEY)||"{}"); } catch(e) { return {}; }
+}
+function sbCfgSet(cfg) { localStorage.setItem(SB_CFG_KEY, JSON.stringify(cfg)); }
+function sbReady() { var c=sbCfgGet(); return !!(c.url && c.key); }
 
+// Supabase REST endpoint
+function sbUrl() {
+  var c=sbCfgGet();
+  return (c.url||"").replace(/\/+$/,"") + "/rest/v1/" + SB_TABLE;
+}
+function sbHeaders() {
+  var c=sbCfgGet();
+  return {
+    "apikey":        c.key||"",
+    "Authorization": "Bearer " + (c.key||""),
+    "Content-Type":  "application/json",
+    "Prefer":        "return=minimal"
+  };
+}
+
+// ── Indicador header ──
 function setOdStatus(status, detail) {
-  var map = { disconnected:"☁ GitHub", syncing:"↻ Sincronizando...", synced:"✓ GitHub OK", offline:"⚠ Offline", error:"✕ Erro" };
+  var map = {
+    disconnected: "☁ Supabase",
+    syncing:      "↻ Sincronizando...",
+    synced:       "✓ Supabase OK",
+    offline:      "⚠ Offline",
+    error:        "✕ Erro sync",
+  };
   var el = document.getElementById("od-indicator");
   if (!el) return;
   el.className = "od-indicator od-" + status;
@@ -944,123 +972,156 @@ function setOdStatus(status, detail) {
   if (detail) el.title = detail;
 }
 
+// ── PUSH → Supabase (upsert) ──
 async function pushToOneDrive() {
-  var tk = ghTkGet();
-  if (!tk) { setOdStatus("disconnected"); return false; }
+  if (!sbReady()) { setOdStatus("disconnected"); return false; }
   setOdStatus("syncing");
   try {
-    var body = JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(S,null,2) } } });
-    var r = await fetch(GIST_API, {
-      method:"PATCH",
-      headers:{"Authorization":"token "+tk,"Content-Type":"application/json","X-GitHub-Api-Version":"2022-11-28"},
-      body:body
+    var r = await fetch(sbUrl(), {
+      method:  "POST",
+      headers: Object.assign({}, sbHeaders(), { "Prefer": "resolution=merge-duplicates,return=minimal" }),
+      body:    JSON.stringify({ id: SB_ROW_ID, data: S, updated_at: new Date().toISOString() })
     });
-    if (r.ok) { setOdStatus("synced","Sync: "+new Date().toLocaleTimeString("pt-BR")); return true; }
-    var err = await r.json().catch(function(){return {};});
-    setOdStatus("error", err.message||"HTTP "+r.status);
-    if (r.status===401) toast("Token GitHub inválido — atualize em Configurações","red");
+    if (r.ok || r.status === 201) {
+      setOdStatus("synced", "Sync: " + new Date().toLocaleTimeString("pt-BR"));
+      return true;
+    }
+    var err = await r.json().catch(function(){ return {}; });
+    setOdStatus("error", (err.message||err.hint||"HTTP "+r.status));
     return false;
-  } catch(e) { setOdStatus("offline",e.message); return false; }
+  } catch(e) { setOdStatus("offline", e.message); return false; }
 }
 
+// ── PULL ← Supabase ──
 async function pullFromOneDrive() {
-  var tk = ghTkGet();
-  if (!tk) return null;
+  if (!sbReady()) return null;
   try {
-    var r = await fetch(GIST_API, {headers:{"Authorization":"token "+tk,"X-GitHub-Api-Version":"2022-11-28"}});
+    var r = await fetch(sbUrl() + "?id=eq." + SB_ROW_ID + "&select=data", {
+      headers: sbHeaders()
+    });
     if (!r.ok) return null;
-    var g = await r.json();
-    var f = g.files && g.files[GIST_FILE];
-    if (!f || !f.content || f.content.trim()==="{}") return null;
-    return JSON.parse(f.content);
+    var rows = await r.json();
+    if (!rows || !rows.length || !rows[0].data) return null;
+    return rows[0].data;
   } catch(e) { return null; }
 }
 
+// ── TESTAR E CONECTAR (Settings) ──
 async function odLogin() {
-  var tk = ghTkGet();
-  if (!tk) { toast("Cole o token antes de conectar","red"); return; }
+  var url = (document.getElementById("sb-url")||{}).value||"";
+  var key = (document.getElementById("sb-key")||{}).value||"";
+  if (!url || !key) { toast("Preencha a URL e a anon key", "red"); return; }
+  sbCfgSet({ url: url.trim(), key: key.trim() });
   setOdStatus("syncing");
   try {
-    var ru = await fetch("https://api.github.com/user",{headers:{"Authorization":"token "+tk,"X-GitHub-Api-Version":"2022-11-28"}});
-    if (!ru.ok) { setOdStatus("error","Token inválido"); toast("Token GitHub inválido","red"); return; }
-    var user = await ru.json();
-    var rg = await fetch(GIST_API,{headers:{"Authorization":"token "+tk,"X-GitHub-Api-Version":"2022-11-28"}});
-    if (!rg.ok) { setOdStatus("error","Gist não encontrado"); toast("Gist não encontrado","red"); return; }
-    // SEMPRE puxar primeiro — nunca sobrescrever Gist ao conectar
-    var remote=await pullFromOneDrive();
-    if(remote){
-      S=remote;
-      if(!S.pillars)S.pillars=defaultState().pillars;
-      if(!S.templates)S.templates=[];
-      if(!S.recurring)S.recurring=[];
-      if(!S.settings)S.settings=defaultState().settings;
-      S.settings.msUserName=user.login;
-      migrateRecurring();
-      try{localStorage.setItem(STORAGE_KEY,JSON.stringify(S));}catch(e){}
-      applyTheme();renderSidebar();render();
-      setOdStatus("synced","Conectado: @"+user.login);
-      toast("Conectado como @"+user.login+" — dados carregados!","green");
-      renderSettings();
-    } else {
-      if(S.settings)S.settings.msUserName=user.login;
-      var ok=await pushToOneDrive();
-      if(ok){save();setOdStatus("synced","Conectado: @"+user.login);toast("Conectado como @"+user.login+" — dados enviados!","green");renderSettings();}
+    // Test: fetch row (even if empty, 200 = connected)
+    var r = await fetch(
+      sbUrl() + "?id=eq." + SB_ROW_ID + "&select=id",
+      { headers: sbHeaders() }
+    );
+    if (!r.ok) {
+      setOdStatus("error", "HTTP " + r.status + " — verifique URL e anon key");
+      toast("❌ Conexão falhou (HTTP " + r.status + ")", "red");
+      return;
     }
-  } catch(e) { setOdStatus("error",e.message); toast("Erro: "+e.message,"red"); }
+    var rows = await r.json();
+    if (S.settings) S.settings.msUserName = "supabase";
+    if (!rows.length) {
+      // Row doesn't exist yet — push current state
+      var ok = await pushToOneDrive();
+      if (ok) { save(); toast("✅ Conectado ao Supabase — dados enviados!", "green"); renderSettings(); }
+    } else {
+      // Row exists — pull and load
+      var remote = await pullFromOneDrive();
+      if (remote) {
+        S = remote;
+        if (!S.pillars)   S.pillars   = defaultState().pillars;
+        if (!S.templates) S.templates = [];
+        if (!S.recurring) S.recurring = [];
+        if (!S.holidays)  S.holidays  = {};
+        if (!S.assessments) S.assessments = {};
+        migrateRecurring();
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
+        applyTheme(); renderSidebar(); render();
+        toast("✅ Conectado — dados carregados do Supabase!", "green");
+        renderSettings();
+      }
+      setOdStatus("synced", "Conectado ao Supabase");
+    }
+  } catch(e) { setOdStatus("error", e.message); toast("❌ Erro: " + e.message, "red"); }
 }
 
 function odLogout() {
-  ghTkSet("");
+  sbCfgSet({});
   if (S.settings) S.settings.msUserName = "";
   setOdStatus("disconnected");
   save();
-  toast("Desconectado do GitHub","yellow");
+  toast("Desconectado do Supabase", "yellow");
   renderSettings();
 }
 
+// ── SAVE: localStorage imediato + Supabase debounced ──
 function save() {
-  try { localStorage.setItem(STORAGE_KEY,JSON.stringify(S)); } catch(e) {}
-  if (ghTkGet()) { clearTimeout(_syncTimer); _syncTimer = setTimeout(pushToOneDrive,800); }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
+  if (sbReady()) {
+    clearTimeout(_syncTimer);
+    _syncTimer = setTimeout(pushToOneDrive, 800);
+  }
 }
 
+// ── LOAD: localStorage imediato + Supabase em background ──
 async function load() {
+  var hadRealData = false;
   try {
     var raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      var tmp = JSON.parse(raw);
+      hadRealData = Object.values(tmp.days||{}).some(function(d){ return (d.deliverables||[]).length>0; })
+                   || (tmp.team||[]).length > 8;
+    }
     S = raw ? JSON.parse(raw) : defaultState();
     if (!S.version||S.version<3) S = defaultState();
-    if (!S.pillars)   S.pillars   = defaultState().pillars;
-    if (!S.holidays)      S.holidays      = {};
-    if (!S.assessments)   S.assessments   = {};
+    if (!S.pillars)     S.pillars     = defaultState().pillars;
+    if (!S.templates)   S.templates   = [];
+    if (!S.recurring)   S.recurring   = [];
+    if (!S.holidays)    S.holidays    = {};
+    if (!S.assessments) S.assessments = {};
     if (S.lastWorkdayMode === undefined) S.lastWorkdayMode = false;
-    if (!S.templates) S.templates = [];
-    if (!S.recurring) S.recurring = [];
-    if(!ghTkGet())loadSeedIfNeeded();
+    if (!sbReady()) loadSeedIfNeeded();
     migrateRecurring();
   } catch(e) { S = defaultState(); }
-  if (!ghTkGet()) { setOdStatus("disconnected"); return; }
+
+  if (!sbReady()) { setOdStatus("disconnected"); return; }
+
   setTimeout(async function() {
     setOdStatus("syncing");
     var remote = await pullFromOneDrive();
     if (remote) {
-      var hadRealData=Object.values(S.days||{}).some(function(d){return(d.deliverables||[]).length>0;});
-      var remItems=Object.values(remote.days||{}).reduce(function(n,d){return n+(d.deliverables||[]).length;},0);
-      var locItems=Object.values(S.days||{}).reduce(function(n,d){return n+(d.deliverables||[]).length;},0);
-      var useRemote=!hadRealData||remItems>=locItems;
-      if (useRemote) {
-        S=remote;
-        if (!S.pillars)   S.pillars   = defaultState().pillars;
-        if (!S.templates) S.templates = [];
-        if (!S.recurring) S.recurring = [];
+      var remItems = Object.values(remote.days||{}).reduce(function(n,d){ return n+(d.deliverables||[]).length; }, 0);
+      var locItems = Object.values(S.days||{}).reduce(function(n,d){ return n+(d.deliverables||[]).length; }, 0);
+      if (!hadRealData || remItems >= locItems) {
+        S = remote;
+        if (!S.pillars)     S.pillars     = defaultState().pillars;
+        if (!S.templates)   S.templates   = [];
+        if (!S.recurring)   S.recurring   = [];
+        if (!S.holidays)    S.holidays    = {};
+        if (!S.assessments) S.assessments = {};
+        if (S.lastWorkdayMode === undefined) S.lastWorkdayMode = false;
         migrateRecurring();
-        try { localStorage.setItem(STORAGE_KEY,JSON.stringify(S)); } catch(e) {}
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
         applyTheme(); renderSidebar(); render();
-        setOdStatus("synced","Do GitHub: "+new Date().toLocaleTimeString("pt-BR"));
-      } else { await pushToOneDrive(); }
-    } else { await pushToOneDrive(); }
+        setOdStatus("synced", "Do Supabase: " + new Date().toLocaleTimeString("pt-BR"));
+      } else {
+        await pushToOneDrive();
+        setOdStatus("synced", "Sync: " + new Date().toLocaleTimeString("pt-BR"));
+      }
+    } else {
+      // Tabela vazia — primeiro push
+      await pushToOneDrive();
+    }
   }, 1200);
 }
 
-// stubs (removidos: MSAL não necessário)
 
 
 
@@ -2972,31 +3033,44 @@ function renderSettings() {
   const s=S.settings;
   let html=`<div class="sec-title" style="margin-bottom:18px">🔧 Configurações</div>
   <div class="settings-card" style="border-color:rgba(16,185,129,.3)">
-    <div class="scrd-title" style="color:var(--green)">☁ GitHub Gist — Sincronização Automática</div>
+    <div class="scrd-title" style="color:var(--green)">☁ Supabase — Sincronização Automática</div>
     <div class="srow" style="flex-direction:column;align-items:flex-start;gap:12px;padding:16px">
-      <div style="font-size:13px;color:var(--text-secondary);line-height:1.7">
-        Seus dados são salvos automaticamente no GitHub a cada alteração e carregados em qualquer computador.
-        <br><span style="font-size:11px">Token expirado? Acesse <a href="https://github.com/settings/tokens" target="_blank" style="color:var(--accent)">github.com/settings/tokens</a> → Generate new token → scope <strong>gist</strong>.</span>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.7;margin-bottom:12px">
+        Dados salvos automaticamente no Supabase a cada alteração. Funciona em qualquer dispositivo sem token exposto.
+        <br><span style="font-size:11px">Configure em <a href="https://supabase.com/dashboard" target="_blank" style="color:var(--accent)">supabase.com/dashboard</a>
+        → Settings → API → copie a <strong>Project URL</strong> e a <strong>anon public key</strong>.</span>
       </div>
       <div class="fg" style="width:100%;max-width:520px">
-        <label class="flbl">Personal Access Token (ghp_...)</label>
+        <label class="flbl">Project URL</label>
+        <input class="fi" id="sb-url" placeholder="https://xxxxxxxxxxxxxxxx.supabase.co"
+          value="${escHtml(sbCfgGet().url||'')}"
+          oninput="sbCfgSet({url:this.value.trim(),key:sbCfgGet().key||''})">
+      </div>
+      <div class="fg" style="width:100%;max-width:520px">
+        <label class="flbl">Anon Key (public)</label>
         <div style="display:flex;gap:8px;align-items:center">
-          <input class="fi" id="gh-tok" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" value="${escHtml(ghTkGet())}" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:12px" oninput="ghTkSet(this.value.trim())">
-          <button class="btn btn-s btn-sm" onclick="var i=document.getElementById('gh-tok');i.type=i.type==='password'?'text':'password'">👁</button>
+          <input class="fi" id="sb-key" type="password"
+            placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            value="${escHtml(sbCfgGet().key||'')}"
+            style="flex:1;font-family:JetBrains Mono,monospace;font-size:11px"
+            oninput="sbCfgSet({url:sbCfgGet().url||'',key:this.value.trim()})">
+          <button class="btn btn-s btn-sm" onclick="var i=document.getElementById('sb-key');i.type=i.type==='password'?'text':'password'">👁</button>
         </div>
       </div>
       <div style="font-size:11px;color:var(--text-muted)">
-        Gist ID: <code style="background:var(--bg-hover);padding:1px 6px;border-radius:4px">c6cb127bea37e948d59c8c32889949aa</code>
-        &nbsp;·&nbsp; Arquivo: <code style="background:var(--bg-hover);padding:1px 6px;border-radius:4px">RG_SDM_data.json</code>
+        Tabela: <code style="background:var(--bg-hover);padding:1px 6px;border-radius:4px">rg_sdm_state</code>
+        &nbsp;·&nbsp; Registro: <code style="background:var(--bg-hover);padding:1px 6px;border-radius:4px">main</code>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-p btn-sm" onclick="ghTkSet(document.getElementById('gh-tok').value.trim());odLogin()">🔑 Testar e Conectar</button>
-        <button class="btn btn-s btn-sm" onclick="pushToOneDrive().then(function(ok){if(ok)toast('Enviado ao GitHub','green')})">↑ Enviar agora</button>
-        <button class="btn btn-s btn-sm" onclick="pullFromOneDrive().then(function(d){if(d){S=d;save();render();toast('Carregado do GitHub','green');}else toast('Gist vazio','yellow')})">↓ Carregar do GitHub</button>
+        <button class="btn btn-p btn-sm" onclick="odLogin()">🔑 Testar e Conectar</button>
+        <button class="btn btn-s btn-sm" onclick="pushToOneDrive().then(function(ok){if(ok)toast('Enviado ao Supabase','green')})">↑ Enviar agora</button>
+        <button class="btn btn-s btn-sm" onclick="pullFromOneDrive().then(function(d){if(d){S=d;save();render();toast('Carregado do Supabase','green');}else toast('Sem dados no Supabase','yellow')})">↓ Carregar agora</button>
         <button class="btn btn-d btn-sm" onclick="odLogout()">Desconectar</button>
       </div>
-      ${ghTkGet()&&S.settings.msUserName?'<div style="font-size:12px;color:var(--green)">✓ Conectado como: <strong>@'+escHtml(S.settings.msUserName)+'</strong></div>':''}
-      ${!ghTkGet()?'<div style="font-size:12px;color:var(--yellow)">⚠ Cole o token acima para ativar a sincronização.</div>':''}
+      ${sbReady()
+        ? '<div style="font-size:12px;color:var(--green);margin-top:4px">✓ Supabase configurado</div>'
+        : '<div style="font-size:12px;color:var(--yellow);margin-top:4px">⚠ Configure URL e anon key para ativar.</div>'}
+    
     </div>
   </div>
   <div class="settings-card">
