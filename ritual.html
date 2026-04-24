@@ -743,7 +743,6 @@ body {
     </div>
   </div>
 
-  <div class="sidebar-team" id="sidebar-team"></div>
 
   <div class="sidebar-footer">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px;">
@@ -1572,7 +1571,7 @@ function renderSidebar() {
   updateLtBadge();
   updateAvalBadge();
   const wrap=document.getElementById('sidebar-team'); if(!wrap) return;
-  let html='<div class="sidebar-team-label">Membros do Time</div>';
+  let html='';
   S.team.filter(m=>m.active).forEach(m=>{
     const idx=memberIdx(m.id); const [fg,bg]=avatarColors(idx>=0?idx:0);
     const pc=getPillarColor(m.pillarId);
@@ -1939,11 +1938,25 @@ function renderGroup(memberId, items, dateStr, isApuracao) {
   const done=items.filter(x=>['done','partial'].includes(x.status)).length;
   const pct=items.length?Math.round((done/items.length)*100):0;
   const pctColor=pct>=90?'var(--green)':pct>=70?'var(--yellow)':'var(--red)';
+  // Aval indicator for this member in current week
+  const wk_=weekKey(dateStr);
+  const aval_=getAssessment(wk_,memberId);
+  const avg_=aval_?avgScore(aval_):null;
+  const avalTip=S.lastWorkdayMode?(avg_?('Avaliação: '+avg_+'/5'):'Clique para avaliar'):'';
+  const avalClick=S.lastWorkdayMode?'onclick="openAvalModal('+JSON.stringify(memberId)+','+JSON.stringify(wk_)+')"':'';
+  const avalChip=S.lastWorkdayMode
+    ?`<div class="g-aval" ${avalClick} title="${avalTip}" style="cursor:${S.lastWorkdayMode?'pointer':'default'}">`
+      +(avg_?`<span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${avg_>=4?'var(--green)':avg_>=3?'var(--yellow)':'var(--red)'}">${avg_}⭐</span>`
+             :`<span style="font-size:11px;color:var(--text-muted)" title="Clique para avaliar">☆</span>`)
+      +'</div>'
+    :'';
+
   let html=`<div class="del-group">
     <div class="del-group-hd">
       <div class="g-avatar" style="background:${bg};color:${fg}">${initials(m.name)}</div>
       <div class="g-name">${m.name}</div>
       <div class="g-pillar" style="color:${pc}">${getPillarLabel(m.pillarId)}</div>
+      ${avalChip}
       <div class="g-pct" style="color:${pctColor}">${pct}%</div>
       <div class="g-count">${done}/${items.length}</div>
     </div>`;
@@ -3751,9 +3764,19 @@ function submitDel(dateStr,editId){
     ...(qtyUnit    !== undefined ? {qtyUnit}     : {}),
     ...(cause      !== undefined ? {cause}       : {}),
     ...(type==='longterm'?{startDate,dueDate,progress,...(completedDate?{completedDate}:(status==='done'?{completedDate:today()}:{}))}:{})};
-  if(editId){updDel(dateStr,editId,data);toast('✅ Entrega atualizada','green');}
-  else{addDel(dateStr,data);toast('✅ Entrega adicionada','green');}
+  const wasEdit = !!editId;
+  const panelDate = dateStr;
+  if(editId){updDel(dateStr,editId,data);toast('✅ Salvo','green');}
+  else{addDel(dateStr,data);toast('✅ Adicionado','green');}
   closeModal();
+  if(wasEdit && view==='ritual'){
+    setTimeout(function(){
+      var nextPending=getEffectiveDels(panelDate).filter(function(d){
+        return d.status==='pending'&&!d._skipMarker&&!d._virtual&&d.id!==editId;
+      });
+      if(nextPending.length>0) openEditDel(panelDate, nextPending[0].id);
+    },150);
+  }
 }
 function submitDelAndAnother(dateStr){
   const desc=document.getElementById('f-desc').value.trim();
