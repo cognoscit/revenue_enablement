@@ -5564,8 +5564,13 @@ function checkLastWorkdayAutoReset() {
 // ═══════════════════════════════════════════════════
 function renderAvaliacoes() {
   destroyCharts();
-  const wk      = weekKey(today());
+  // "Open week" = the week configured for assessment, or current week as fallback
+  const openWk   = S.lastWorkdayMode && S._lastWorkdayWeek ? S._lastWorkdayWeek : weekKey(today());
+  const wk       = openWk;  // used throughout as the "featured" week
+  const todayWk  = weekKey(today());  // actual current calendar week
   const allWeeks = Object.keys(S.assessments||{}).sort().reverse();
+  // Ensure the open week appears even if no assessments filed yet
+  if (!allWeeks.includes(wk)) allWeeks.unshift(wk);
   const members  = S.team.filter(m => m.active);
 
   // Score color
@@ -5601,7 +5606,9 @@ function renderAvaliacoes() {
     window._weekToggleCache[twk]=weekK;
     var hdrHtml = '<div class="aval-week-hdr" onclick="_toggleWeekSection(\'' + twk + '\')">'
       + '<div><div class="aval-week-title">' + weekK
-        + (weekK===wk ? ' <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(99,102,241,.12);color:#6366f1;font-family:JetBrains Mono,monospace">Semana atual</span>' : '')
+        + (weekK===todayWk ? ' <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(99,102,241,.12);color:#6366f1;font-family:JetBrains Mono,monospace">Semana atual</span>' : '')
+        + (weekK===wk && S.lastWorkdayMode && weekK!==todayWk ? ' <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(245,158,11,.12);color:var(--yellow);font-family:JetBrains Mono,monospace">⭐ Aberta para avaliação</span>' : '')
+        + (weekK===wk && S.lastWorkdayMode && weekK===todayWk ? ' <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(16,185,129,.12);color:var(--green);font-family:JetBrains Mono,monospace">⭐ Aberta</span>' : '')
       + '</div>'
       + '<div class="aval-week-meta">' + filled + '/' + total + ' preenchidas'
         + (weekAvg ? ' · Média geral: <strong style="color:' + scoreColor(weekAvg) + '">' + weekAvg + '</strong>' : '')
