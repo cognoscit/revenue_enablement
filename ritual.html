@@ -1967,7 +1967,7 @@ function renderRitual() {
 
   // ── Autoavaliação banner (último dia útil) ──
   if (S.lastWorkdayMode) {
-    const wk = weekKey(date);
+    const wk = S._lastWorkdayWeek || weekKey(date);
     const pending = S.team.filter(m => m.active && !getAssessment(wk, m.id));
     const done_   = S.team.filter(m => m.active &&  getAssessment(wk, m.id));
     html += '<div class="folga-banner" style="background:rgba(99,102,241,.06);border-color:rgba(99,102,241,.25);cursor:pointer" onclick="setView(\'avaliacoes\')">'
@@ -2229,7 +2229,7 @@ function renderGroup(memberId, items, dateStr, isApuracao) {
   const pct=items.length?Math.round((done/items.length)*100):0;
   const pctColor=pct>=90?'var(--green)':pct>=70?'var(--yellow)':'var(--red)';
   // Aval indicator for this member in current week
-  const wk_=weekKey(dateStr);
+  const wk_=S._lastWorkdayWeek||weekKey(dateStr);
   const aval_=getAssessment(wk_,memberId);
   const avg_=aval_?avgScore(aval_):null;
   const avalCacheKey='av_'+(memberId||'').replace(/[^a-z0-9]/gi,'_');
@@ -3333,12 +3333,34 @@ function renderSettings() {
     <div class="scrd-title">⭐ Controle de Autoavaliações</div>
     <div class="srow" style="flex-direction:column;gap:14px;padding:16px">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <div class="toggle-wrap" onclick="S.lastWorkdayMode=!S.lastWorkdayMode;if(S.lastWorkdayMode){S._lastWorkdayWeek=weekKey(today());}else{S._lastWorkdayWeek=null;}save();renderSettings()">
+        <div class="toggle-wrap" onclick="S.lastWorkdayMode=!S.lastWorkdayMode;if(S.lastWorkdayMode&&!S._lastWorkdayWeek){S._lastWorkdayWeek=weekKey(today());}if(!S.lastWorkdayMode){S._lastWorkdayWeek=null;}save();renderSettings()">
           <div class="toggle-sw ${S.lastWorkdayMode?'on':''}"></div>
-          <span class="toggle-lbl">${S.lastWorkdayMode?'Avaliações <strong>abertas</strong> — '+weekKey(today()):'Avaliações fechadas'}</span>
+          <span class="toggle-lbl">${S.lastWorkdayMode?'Avaliações abertas':'Avaliações fechadas'}</span>
         </div>
-        ${S.lastWorkdayMode?'<span style="font-size:11px;color:var(--text-muted)">Desativa quando a semana mudar</span>':''}
       </div>
+      ${S.lastWorkdayMode ? `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div class="fg" style="min-width:200px">
+          <label class="flbl">Semana aberta para avaliação</label>
+          <select class="fsel" onchange="S._lastWorkdayWeek=this.value;save();updateAvalBadge();renderSettings()">
+            ${(function(){
+              // Show last 8 weeks + next 2 as options
+              var opts=''; var today_=today();
+              for(var w=-1;w<=8;w++){
+                var d=new Date(today_+'T12:00:00');
+                d.setDate(d.getDate() - w*7);
+                var wk2=weekKey(d.toISOString().split('T')[0]);
+                var sel=(S._lastWorkdayWeek===wk2)?'selected':'';
+                opts+='<option value="'+wk2+'" '+sel+'>'+wk2+(w===0?' (semana atual)':w===-1?' (próxima)':' ('+w+'sem atrás)')+'</option>';
+              }
+              return opts;
+            })()}
+          </select>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:16px">
+          Desativa automaticamente quando a semana atual avançar além da selecionada
+        </div>
+      </div>` : ''}
       <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:4px">Histórico de semanas</div>
       ${(function(){
         var weeks=Object.keys(S.assessments||{}).sort().reverse();
@@ -5382,7 +5404,7 @@ function updateAvalBadge() {
   if (!b) return;
   // Badge shows ! if it's lastWorkdayMode and current week has pending assessments
   if (!S.lastWorkdayMode) { b.classList.add('hidden'); return; }
-  var wk = weekKey(today());
+  var wk = S._lastWorkdayWeek || weekKey(today());
   var pending = S.team.filter(function(m) {
     return m.active && !getAssessment(wk, m.id);
   }).length;
@@ -5519,8 +5541,16 @@ function toggleLastWorkday() {
 
 // Call on every page load / render to auto-deactivate if week changed
 function checkLastWorkdayAutoReset() {
-  if (!S.lastWorkdayMode) return;
-  if (S._lastWorkdayWeek && S._lastWorkdayWeek !== weekKey(today())) {
+  if (!S.lastWorkdayMode || !S._lastWorkdayWeek) return;
+  // Only auto-close if the selected week is already more than 1 week in the past
+  // This prevents accidental close when admin opens a past week for correction
+  var selD = new Date(S._lastWorkdayWeek.split('-W')[0]+'-01-01');
+  var selW = parseInt(S._lastWorkdayWeek.split('-W')[1]);
+  var curW = parseInt(weekKey(today()).split('-W')[1]);
+  var curY = parseInt(weekKey(today()).split('-W')[0]);
+  var selY = parseInt(S._lastWorkdayWeek.split('-W')[0]);
+  var weekDiff = (curY - selY) * 52 + (curW - selW);
+  if (weekDiff > 1) {  // auto-close only if >1 week has passed since selected week
     S.lastWorkdayMode  = false;
     S._lastWorkdayWeek = null;
     save();
@@ -5642,7 +5672,7 @@ function renderAvaliacoes() {
     + '</div></div>';
 
   // Current week always shown expanded
-  _expandedWeeks[wk] = true;  // current week always starts expanded
+  if (_expandedWeeks[wk] === undefined) _expandedWeeks[wk] = true; // default expanded on first render only
   html += buildWeekSection(wk);
 
   // Past weeks collapsed by default
@@ -5929,6 +5959,17 @@ function _doSetView(v){
 }
 
 function render(){
+  // Block all rendering until user is identified
+  if (!getCurrentUser() || !S.team.find(function(m){ var c=getCurrentUser(); return c && m.id===c.memberId && m.active; })) {
+    document.getElementById('content').innerHTML =
+      '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px;color:var(--text-muted)">'
+      + '<div style="font-size:48px">👤</div>'
+      + '<div style="font-size:16px;font-weight:600;color:var(--text-primary)">Identificação necessária</div>'
+      + '<div style="font-size:13px">Selecione seu nome para acessar o sistema.</div>'
+      + '<button class="btn btn-p" onclick="showIdentityModal(true)">Identificar-se</button>'
+      + '</div>';
+    return;
+  }
   checkLastWorkdayAutoReset();
   destroyCharts();
   switch(view){
