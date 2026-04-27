@@ -1230,8 +1230,11 @@ function save(changedDateKey) {
 
   // Mark dirty: specific day items OR config
   if (changedDateKey && S.days && S.days[changedDateKey]) {
+    // Only mark items not already flagged as deleted
     (S.days[changedDateKey].deliverables||[]).forEach(function(item) {
-      _dirtyItems.set(item.id, { dateKey: changedDateKey, item: item });
+      if (!(_dirtyItems.has(item.id) && _dirtyItems.get(item.id).deleted)) {
+        _dirtyItems.set(item.id, { dateKey: changedDateKey, item: item });
+      }
     });
   } else {
     _configDirty = true;
@@ -1248,7 +1251,8 @@ function save(changedDateKey) {
 
   if (sbReady()) {
     clearTimeout(_syncTimer);
-    _syncTimer = setTimeout(pushToOneDrive, 800);
+    // Push immediately — no debounce, no data loss risk
+    pushToOneDrive();
   }
 }
 
@@ -1719,7 +1723,13 @@ function ensureDay(s) { if(!S.days[s]) S.days[s]={deliverables:[],notes:''}; if(
 
 function addDel(dateStr, data) { ensureDay(dateStr); S.days[dateStr].deliverables.push({id:genId(),createdAt:new Date().toISOString(),status:'pending',notes:'',blocker:false,...data}); save(); render(); }
 function updDel(dateStr, id, updates) { ensureDay(dateStr); const idx=S.days[dateStr].deliverables.findIndex(d=>d.id===id); if(idx!==-1){S.days[dateStr].deliverables[idx]={...S.days[dateStr].deliverables[idx],...updates}; save(dateStr); render(); updateLtBadge();} }
-function delDel(dateStr, id) { if(!S.days[dateStr]) return; S.days[dateStr].deliverables=S.days[dateStr].deliverables.filter(d=>d.id!==id); save(); render(); }
+function delDel(dateStr, id) {
+  if(!S.days[dateStr]) return;
+  // Mark deleted in Supabase before local removal
+  if(sbReady()) _dirtyItems.set(id,{dateKey:dateStr,item:null,deleted:true});
+  S.days[dateStr].deliverables=S.days[dateStr].deliverables.filter(d=>d.id!==id);
+  save(dateStr); render();
+}
 
 function cycleStatus(dateStr, id) {
   const item=getDels(dateStr).find(d=>d.id===id); if(!item) return;
@@ -4156,10 +4166,17 @@ function skipThisOccurrence(dateStr, itemId, srcId) {
 }
 function removeRecurringSource(srcId){
   S.recurring=(S.recurring||[]).filter(r=>r.id!==srcId);
-  // Also remove materialized instances
-  Object.values(S.days).forEach(day=>{
+  // Mark all materialized instances as deleted in Supabase BEFORE removing locally
+  Object.entries(S.days||{}).forEach(function(e){
+    var dk=e[0], day=e[1];
+    (day.deliverables||[]).forEach(function(d){
+      if(d.recurringSourceId===srcId){
+        _dirtyItems.set(d.id,{dateKey:dk,item:null,deleted:true});
+      }
+    });
     if(day.deliverables) day.deliverables=day.deliverables.filter(d=>d.recurringSourceId!==srcId);
   });
+  _configDirty=true; // recurring array changed
   save();render();toast('🗑 Recorrência removida completamente','yellow');
 }
 
