@@ -1754,7 +1754,12 @@ function openCauseMiniModal(dateStr, id, status, desc) {
   const causeButtons = Object.entries(CAUSES).map(function(entry) {
     var k=entry[0], v=entry[1];
     return '<div class="cause-mini-btn" '
-      + 'onclick="applyCauseMini(' + JSON.stringify(dateStr) + ',' + JSON.stringify(id) + ',' + JSON.stringify(k) + ',this)" '
+      + (function(){
+          var ck='c_'+(dateStr||'').replace(/[^a-z0-9]/gi,'_')+'_'+(id||'').replace(/[^a-z0-9]/gi,'_')+'_'+(k||'');
+          if(!window._causeCache) window._causeCache={};
+          window._causeCache[ck]={dateStr:dateStr,id:id,k:k};
+          return 'onclick="_applyCause(\''+ck+'\',this)" ';
+        })()
       + 'style="--cc:' + v.color + '">'
       + v.icon + ' ' + v.lbl
       + '</div>';
@@ -1769,6 +1774,11 @@ function openCauseMiniModal(dateStr, id, status, desc) {
     + '<div class="cause-mini-btn" onclick="closeModal()" style="color:var(--text-muted)">— Pular</div>'
     + '</div></div>';
   openModal({ title:'🔍 Causa Raiz', body, foot:'' });
+}
+
+function _applyCause(ck,el){
+  var c=window._causeCache&&window._causeCache[ck];
+  if(c) applyCauseMini(c.dateStr,c.id,c.k,el);
 }
 
 function applyCauseMini(dateStr, id, causeKey, btn) {
@@ -4751,7 +4761,7 @@ function submitBatch(){
 }
 
 // Also expose openBatchAdd from member sidebar
-function jumpMember(id){hf.member=id;setView('history');}
+
 function quickAddForMember(id){openBatchAdd(date,id);}
 
 // ═══════════════════════════════════════════════════
