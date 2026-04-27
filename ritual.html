@@ -5563,6 +5563,8 @@ function checkLastWorkdayAutoReset() {
 // RENDER: AUTOAVALIAÇÕES
 // ═══════════════════════════════════════════════════
 
+var _expandedWeeks = {};
+
 function avalScoreColor(s) {
   if (!s) return 'var(--text-muted)';
   var v = parseFloat(s);
