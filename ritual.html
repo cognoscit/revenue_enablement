@@ -934,7 +934,8 @@ function loadSeedIfNeeded() {
 // ⚙️  SUPABASE CONFIG — preencher antes de publicar
 // ═══════════════════════════════════════════════════
 const SB_URL     = "https://dlsumchrteigmuumpeke.supabase.co";   // ex: "https://xyzxyz.supabase.co"
-const SB_KEY     = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsc3VtY2hydGVpZ211dW1wZWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNDE3MjgsImV4cCI6MjA5MjYxNzcyOH0.1JCPBodkrVjbH3dYz9kbWjfKil8suhYNb4R2L3fxRFM";   // anon public key (eyJ...)const SB_ROW_ID  = "main";
+const SB_KEY     = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsc3VtY2hydGVpZ211dW1wZWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNDE3MjgsImV4cCI6MjA5MjYxNzcyOH0.1JCPBodkrVjbH3dYz9kbWjfKil8suhYNb4R2L3fxRFM";   // anon public key (eyJ...)
+const SB_ROW_ID  = "main";
 const SB_TABLE   = "rg_sdm_state";
 
 let _syncTimer     = null;
@@ -2078,6 +2079,8 @@ function buildPanel({id,icon,title,titleColor,badgeStyle,count,actions,bodyHtml,
 
 
 function memberFilterHtml(panelId) {
+  // Non-admin users don't get the member filter — they always see their own
+  if (!isAdminUser()) return '';
   let h = `<div class="mfpill ${!ritualFilter.member?'active':''}" data-mfpanel="${panelId}" data-mid="" onclick="setMemberFilter('')" style="${!ritualFilter.member?'border-color:var(--border-accent);background:var(--accent-dim);color:var(--accent)':''}">👤 Todos</div>`;
   S.team.filter(m=>m.active).forEach(m=>{
     const isA = ritualFilter.member===m.id;
@@ -2161,8 +2164,22 @@ function refreshRitualPanels(){
   });
 }
 
+function isAdminUser() {
+  // Admin sees everything — identified by name containing 'Matheus'
+  var cur = getCurrentUser();
+  return !cur || cur.name.toLowerCase().indexOf('matheus') !== -1;
+}
+
 function filterItems(items) {
-  let r=items;
+  let r = items;
+
+  // Auto-filter: non-admin users see only their own items
+  if (!isAdminUser()) {
+    var cur = getCurrentUser();
+    if (cur) r = r.filter(i => i.memberId === cur.memberId);
+  }
+
+  // Manual filters (still apply on top)
   if(ritualFilter.q){const q=ritualFilter.q.toLowerCase();r=r.filter(i=>i.description&&i.description.toLowerCase().includes(q));}
   if(ritualFilter.pillar){const mids=S.team.filter(m=>m.pillarId===ritualFilter.pillar).map(m=>m.id);r=r.filter(i=>mids.includes(i.memberId));}
   if(ritualFilter.type){r=r.filter(i=>(i.type||'daily')===ritualFilter.type);}
@@ -2327,7 +2344,10 @@ function renderWeekly() {
   days.forEach(dayStr=>{
     const kpis=calcKPIs(dayStr);
     const isT=dayStr===today();
-    const hasData=getEffectiveDels(dayStr).length>0;
+    const wkEffective = isAdminUser()
+      ? getEffectiveDels(dayStr)
+      : getEffectiveDels(dayStr).filter(function(d){ var cur=getCurrentUser(); return cur ? d.memberId===cur.memberId : true; });
+    const hasData=wkEffective.length>0;
     const dayHoliday=getHoliday(dayStr);
     const rate=kpis.total?kpis.delivery_rate:null;
     const rateColor=rate===null?'var(--text-muted)':rate>=90?'var(--green)':rate>=70?'var(--yellow)':'var(--red)';
