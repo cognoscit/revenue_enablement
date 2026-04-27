@@ -3363,7 +3363,7 @@ function renderSettings() {
       </div>` : ''}
       <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:4px">Histórico de semanas</div>
       ${(function(){
-        var weeks=Object.keys(S.assessments||{}).sort().reverse();
+        var weeks=Object.keys(S.assessments||{}).filter(function(w){return Object.keys((S.assessments[w])||{}).length>0;}).sort().reverse();
         if(!weeks.length) return '<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Nenhuma avaliação registrada ainda.</div>';
         var rows='';
         weeks.forEach(function(wk){
@@ -5387,14 +5387,15 @@ var AVAL_CRITERIA = [
 // Get or create assessment record
 function getAssessment(weekK, memberId) {
   if (!S.assessments) S.assessments = {};
-  if (!S.assessments[weekK]) S.assessments[weekK] = {};
-  return S.assessments[weekK][memberId] || null;
+  // Read-only — don't create empty week records
+  return (S.assessments[weekK] && S.assessments[weekK][memberId]) || null;
 }
 
 function saveAssessment(weekK, memberId, data) {
   if (!S.assessments) S.assessments = {};
   if (!S.assessments[weekK]) S.assessments[weekK] = {};
   S.assessments[weekK][memberId] = Object.assign({ updatedAt: new Date().toISOString() }, data);
+  _configDirty = true;
   save();
   updateAvalBadge();
 }
@@ -5559,6 +5560,34 @@ function checkLastWorkdayAutoReset() {
 }
 
 
+
+function confirmDeleteWeekAval(weekK) {
+  if (!weekK) return;
+  var filled = Object.keys((S.assessments||{})[weekK]||{}).length;
+  var desc   = filled ? filled + ' avaliação(ões) preenchida(s)' : 'Semana vazia (sem avaliações)';
+  var foot   = '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    + '<button class="btn btn-d" onclick="deleteWeekAval(\'' + weekK + '\');closeModal()">🗑 Excluir</button>';
+  openModal({
+    title: '🗑 Excluir semana — ' + weekK,
+    body: '<div style="text-align:center;padding:20px">'
+      + '<div style="font-size:32px;margin-bottom:10px">⭐</div>'
+      + '<div style="font-weight:600;margin-bottom:6px">' + weekK + '</div>'
+      + '<div style="font-size:13px;color:var(--text-muted)">' + desc + '</div>'
+      + '</div>',
+    foot: foot
+  });
+}
+
+function deleteWeekAval(weekK) {
+  if (!S.assessments) return;
+  delete S.assessments[weekK];
+  _configDirty = true;
+  save();
+  toast('🗑 Semana ' + weekK + ' removida', 'yellow');
+  if (view === 'settings') renderSettings();
+  if (view === 'avaliacoes') renderAvaliacoes();
+}
+
 // ═══════════════════════════════════════════════════
 // RENDER: AUTOAVALIAÇÕES
 // ═══════════════════════════════════════════════════
@@ -5696,7 +5725,10 @@ function renderAvaliacoes() {
   }
 
   // Admin: all weeks
-  var allWeeks = Object.keys(S.assessments || {}).sort().reverse();
+  // Only show weeks that actually have at least one assessment filled
+  var allWeeks = Object.keys(S.assessments || {}).filter(function(w){
+    return Object.keys((S.assessments[w])||{}).length > 0;
+  }).sort().reverse();
   if (openWk && allWeeks.indexOf(openWk) === -1) allWeeks.unshift(openWk);
 
   var html = '<div class="sec-hd"><div class="sec-title">⭐ Autoavaliações Semanais</div>'
