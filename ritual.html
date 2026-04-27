@@ -867,7 +867,8 @@ function defaultState() {
     holidays: {},
     assessments: {},
     activityLog: [],  // [{ ts, action, actor, memberId, detail }]
-    lastWorkdayMode: false,  // toggle: último dia útil da semana
+    lastWorkdayMode: false,
+    _lastWorkdayWeek: null,
     templates: [],
     kpis: [
       { id:'k1', name:'Taxa de Entrega',  metric:'delivery_rate',      pillarId:null, memberId:null, color:'#10b981', target:90,  enabled:true },
@@ -1286,6 +1287,7 @@ async function load() {
     if (!S.assessments)     S.assessments     = {};
     if (!S.activityLog)     S.activityLog     = [];
     if (S.lastWorkdayMode === undefined) S.lastWorkdayMode = false;
+    if (S._lastWorkdayWeek === undefined) S._lastWorkdayWeek = null;
     if (!sbReady()) loadSeedIfNeeded();
     setTimeout(checkIdentityOnLoad, 700);
     migrateRecurring();
@@ -5306,11 +5308,14 @@ function renderKanban() {
 
 // ISO week key: YYYY-WXX
 function weekKey(dateStr) {
+  // ISO 8601: week starts Monday, week 1 = week containing first Thursday
   var d = new Date((dateStr||today()) + 'T12:00:00');
-  var jan4 = new Date(d.getFullYear(), 0, 4);
-  var dayOfYear = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
-  var weekNum = Math.ceil((dayOfYear + jan4.getDay()) / 7);
-  return d.getFullYear() + '-W' + String(weekNum).padStart(2,'0');
+  // Adjust to nearest Thursday (ISO week is identified by its Thursday)
+  var thu = new Date(d);
+  thu.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 3);
+  var yearStart = new Date(thu.getFullYear(), 0, 1);
+  var weekNum = Math.ceil(((thu - yearStart) / 86400000 + 1) / 7);
+  return thu.getFullYear() + '-W' + String(weekNum).padStart(2,'0');
 }
 
 // Criteria for self-assessment
@@ -5464,10 +5469,27 @@ function submitAvalModal(memberId, weekK) {
 // Toggle último dia útil mode
 function toggleLastWorkday() {
   S.lastWorkdayMode = !S.lastWorkdayMode;
+  if (S.lastWorkdayMode) {
+    // Store which week was activated — auto-deactivates when week changes
+    S._lastWorkdayWeek = weekKey(today());
+  } else {
+    S._lastWorkdayWeek = null;
+  }
   save();
   updateAvalBadge();
-  render(); // re-render ritual to show/hide assessment banner
-  toast(S.lastWorkdayMode ? '🗓 Modo último dia útil ativado' : '🗓 Modo desativado', 'blue');
+  render();
+  toast(S.lastWorkdayMode ? '🗓 Modo último dia útil ativado — avaliações abertas para a semana!' : '🗓 Modo desativado', 'blue');
+}
+
+// Call on every page load / render to auto-deactivate if week changed
+function checkLastWorkdayAutoReset() {
+  if (!S.lastWorkdayMode) return;
+  if (S._lastWorkdayWeek && S._lastWorkdayWeek !== weekKey(today())) {
+    S.lastWorkdayMode  = false;
+    S._lastWorkdayWeek = null;
+    save();
+    updateAvalBadge();
+  }
 }
 
 
@@ -5844,6 +5866,7 @@ function _doSetView(v){
 }
 
 function render(){
+  checkLastWorkdayAutoReset();
   destroyCharts();
   switch(view){
     case 'ritual':   renderRitual(); break;
