@@ -3330,6 +3330,42 @@ function renderSettings() {
     <div class="srow"><div><div class="srow-lbl" style="color:var(--red)">Resetar Tudo</div><div class="srow-desc">Apaga todos os dados permanentemente</div></div><button class="btn btn-d btn-sm" onclick="confirmReset()">⚠ Reset</button></div>
   </div>
   <div class="settings-card">
+    <div class="scrd-title">⭐ Controle de Autoavaliações</div>
+    <div class="srow" style="flex-direction:column;gap:14px;padding:16px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div class="toggle-wrap" onclick="S.lastWorkdayMode=!S.lastWorkdayMode;if(S.lastWorkdayMode){S._lastWorkdayWeek=weekKey(today());}else{S._lastWorkdayWeek=null;}save();renderSettings()">
+          <div class="toggle-sw ${S.lastWorkdayMode?'on':''}"></div>
+          <span class="toggle-lbl">${S.lastWorkdayMode?'Avaliações <strong>abertas</strong> — '+weekKey(today()):'Avaliações fechadas'}</span>
+        </div>
+        ${S.lastWorkdayMode?'<span style="font-size:11px;color:var(--text-muted)">Desativa quando a semana mudar</span>':''}
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:4px">Histórico de semanas</div>
+      ${(function(){
+        var weeks=Object.keys(S.assessments||{}).sort().reverse();
+        if(!weeks.length) return '<div style="font-size:12px;color:var(--text-muted);padding:4px 0">Nenhuma avaliação registrada ainda.</div>';
+        var rows='';
+        weeks.forEach(function(wk){
+          var filled=Object.keys((S.assessments[wk]||{})).length;
+          var total=S.team.filter(function(m){return m.active;}).length;
+          var allScores=[];
+          Object.values(S.assessments[wk]||{}).forEach(function(a){var av=avgScore(a);if(av)allScores.push(parseFloat(av));});
+          var avg=allScores.length?(allScores.reduce(function(a,b){return a+b;},0)/allScores.length).toFixed(1):null;
+          var color=avg?(parseFloat(avg)>=4?'var(--green)':parseFloat(avg)>=3?'var(--yellow)':'var(--red)'):'var(--text-muted)';
+          var ck='da_'+wk.replace(/[^a-z0-9]/gi,'_');
+          if(!window._avalDelCache)window._avalDelCache={};
+          window._avalDelCache[ck]=wk;
+          rows+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">'
+            +'<span style="font-family:JetBrains Mono,monospace;font-size:12px;font-weight:600;min-width:80px">'+wk+'</span>'
+            +'<span style="font-size:12px;color:var(--text-muted)">'+filled+'/'+total+'</span>'
+            +(avg?'<span style="font-family:JetBrains Mono,monospace;font-size:12px;font-weight:700;color:'+color+'">⭐ '+avg+'</span>':'<span style="font-size:11px;color:var(--text-muted)">sem notas</span>')
+            +'<button class="btn btn-d btn-sm" style="margin-left:auto;padding:2px 8px;font-size:11px" onclick="confirmDeleteWeekAval(_avalDelCache[\'' + ck + '\'])">🗑</button>'
+            +'</div>';
+        });
+        return rows;
+      })()}
+    </div>
+  </div>
+  <div class="settings-card">
     <div class="scrd-title">Sobre</div>
     <div class="srow"><div class="srow-lbl">Ritual de Gestão · Revenue Enablement GBS SA</div><span class="mono" style="font-size:10px;color:var(--text-muted)">v3.0 — 2026</span></div>
     <div class="srow" style="font-size:12px;color:var(--text-muted)">Atalhos: Ctrl+← / → = navegar datas · Ctrl+N = nova entrega · Esc = fechar modal</div>
@@ -5517,7 +5553,8 @@ function renderAvaliacoes() {
   }
 
   // Build week section
-  function buildWeekSection(weekK, expanded) {
+  function buildWeekSection(weekK) {
+    var expanded = !!_expandedWeeks[weekK];
     var wkAssess = (S.assessments||{})[weekK] || {};
     var filled   = Object.keys(wkAssess).length;
     var total    = members.length;
@@ -5605,13 +5642,14 @@ function renderAvaliacoes() {
     + '</div></div>';
 
   // Current week always shown expanded
-  html += buildWeekSection(wk, true);
+  _expandedWeeks[wk] = true;  // current week always starts expanded
+  html += buildWeekSection(wk);
 
   // Past weeks collapsed by default
   var pastWeeks = allWeeks.filter(function(w){ return w !== wk; });
   if (pastWeeks.length) {
     html += '<div style="font-family:JetBrains Mono,monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin:20px 0 10px;display:flex;align-items:center;gap:10px">Semanas anteriores <span style="flex:1;height:1px;background:var(--border);display:block"></span></div>';
-    pastWeeks.forEach(function(wk2) { html += buildWeekSection(wk2, false); });
+    pastWeeks.forEach(function(wk2) { html += buildWeekSection(wk2); });
   } else if (!allWeeks.length) {
     html += '<div style="color:var(--text-muted);font-size:13px;padding:16px 0">Nenhuma avaliação anterior registrada.</div>';
   }
@@ -5628,6 +5666,31 @@ function openNextPending(weekK) {
   if (!pending.length) { toast('Todas as avaliações desta semana já foram preenchidas!', 'green'); return; }
   openAvalModal(pending[0].id, weekK);
 }
+
+function confirmDeleteWeekAval(weekK) {
+  if (!weekK) return;
+  var filled = Object.keys((S.assessments||{})[weekK]||{}).length;
+  var foot = '<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+    + '<button class="btn btn-d" onclick="deleteWeekAval(\'' + weekK + '\');closeModal()">🗑 Excluir ' + filled + ' avaliação(ões)</button>';
+  openModal({
+    title: '🗑 Excluir Avaliações — ' + weekK,
+    body: '<div style="text-align:center;padding:20px"><div style="font-size:32px;margin-bottom:10px">⭐</div>'
+      + '<div style="font-weight:600;margin-bottom:6px">' + weekK + '</div>'
+      + '<div style="font-size:13px;color:var(--text-muted)">' + filled + ' avaliação(ões) serão excluídas permanentemente.</div></div>',
+    foot: foot
+  });
+}
+
+function deleteWeekAval(weekK) {
+  if (S.assessments && S.assessments[weekK]) {
+    delete S.assessments[weekK];
+    _configDirty = true;
+    save();
+    toast('🗑 Avaliações da semana ' + weekK + ' removidas', 'yellow');
+    renderSettings();
+  }
+}
+
 function _toggleWeekSection(k) {
   var wk=window._weekToggleCache&&window._weekToggleCache[k];
   if(wk) toggleWeekSection(wk);
