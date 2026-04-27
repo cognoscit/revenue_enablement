@@ -5562,156 +5562,166 @@ function checkLastWorkdayAutoReset() {
 // ═══════════════════════════════════════════════════
 // RENDER: AUTOAVALIAÇÕES
 // ═══════════════════════════════════════════════════
+
+function avalScoreColor(s) {
+  if (!s) return 'var(--text-muted)';
+  var v = parseFloat(s);
+  return v >= 4 ? 'var(--green)' : v >= 3 ? 'var(--yellow)' : 'var(--red)';
+}
+
+function buildAvalWeekSection(weekK, openWk, todayWk) {
+  var expanded  = !!_expandedWeeks[weekK];
+  var wkAssess  = (S.assessments || {})[weekK] || {};
+  var members   = S.team.filter(function(m){ return m.active; });
+  var filled    = Object.keys(wkAssess).length;
+  var total     = members.length;
+  var allScores = [];
+  Object.values(wkAssess).forEach(function(a){ var av = avgScore(a); if (av) allScores.push(parseFloat(av)); });
+  var weekAvg   = allScores.length ? (allScores.reduce(function(a,b){ return a+b; }, 0) / allScores.length).toFixed(1) : null;
+
+  var twk = 'tw_' + weekK.replace(/[^a-z0-9]/gi, '_');
+  if (!window._weekToggleCache) window._weekToggleCache = {};
+  window._weekToggleCache[twk] = weekK;
+
+  var isOpen    = (weekK === openWk && S.lastWorkdayMode);
+  var isCurrent = (weekK === todayWk);
+  var badges = '';
+  if (isCurrent) badges += ' <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(99,102,241,.12);color:#6366f1;font-family:JetBrains Mono,monospace">Semana atual</span>';
+  if (isOpen)    badges += ' <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(16,185,129,.12);color:var(--green);font-family:JetBrains Mono,monospace">⭐ Aberta</span>';
+
+  var hdrHtml = '<div class="aval-week-hdr" onclick="_toggleWeekSection(\'' + twk + '\')">'
+    + '<div><div class="aval-week-title">' + weekK + badges + '</div>'
+    + '<div class="aval-week-meta">' + filled + '/' + total + ' preenchidas'
+      + (weekAvg ? ' · Média: <strong style="color:' + avalScoreColor(weekAvg) + '">' + weekAvg + '</strong>' : '')
+    + '</div></div>'
+    + '<div style="display:flex;align-items:center;gap:8px">'
+      + '<button class="btn btn-p btn-sm" onclick="event.stopPropagation();openNextPending(\'' + weekK + '\')">+ Preencher em lote</button>'
+      + '<span style="color:var(--text-muted);font-size:16px">' + (expanded ? '▲' : '▼') + '</span>'
+    + '</div></div>';
+
+  if (!expanded) return hdrHtml;
+
+  var membersHtml = '';
+  members.forEach(function(m) {
+    var aval      = wkAssess[m.id] || null;
+    var avg       = avgScore(aval);
+    var pc        = getPillarColor(m.pillarId);
+    var kpi       = memberWeekKPIs(m.id, weekK);
+    var rateColor = kpi.rate !== null ? (kpi.rate >= 90 ? 'var(--green)' : kpi.rate >= 70 ? 'var(--yellow)' : 'var(--red)') : 'var(--text-muted)';
+    var chips     = '';
+    if (aval && aval.scores) {
+      AVAL_CRITERIA.forEach(function(c) {
+        var v = aval.scores[c.id];
+        if (v) chips += '<span class="aval-score-pill" style="background:' + avalScoreColor(v) + '18;color:' + avalScoreColor(v) + ';font-size:9px">' + c.icon + ' ' + v + '</span>';
+      });
+    }
+    var ak = 'am_' + weekK.replace(/[^a-z0-9]/gi, '_') + '_' + m.id.replace(/[^a-z0-9]/gi, '_');
+    if (!window._avalModalCache) window._avalModalCache = {};
+    window._avalModalCache[ak] = { memberId: m.id, weekK: weekK };
+    membersHtml += '<div class="aval-member-row" onclick="_openAvalModal(\'' + ak + '\')">'
+      + renderAvatar(m.id, 32, 11)
+      + '<div style="flex:1;min-width:0">'
+        + '<div style="font-size:13px;font-weight:500">' + escHtml(m.name) + '</div>'
+        + '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">'
+          + '<span style="font-size:10px;color:' + pc + '">' + getPillarLabel(m.pillarId) + '</span>'
+          + (kpi.rate !== null ? '<span style="font-family:JetBrains Mono,monospace;font-size:10px;color:' + rateColor + '">' + kpi.rate + '% entrega</span>' : '')
+        + '</div>'
+      + '</div>'
+      + (aval
+        ? '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">'
+            + '<div style="font-family:JetBrains Mono,monospace;font-size:20px;font-weight:800;color:' + avalScoreColor(avg) + '">' + avg + '</div>'
+            + '<div class="aval-score-pills">' + chips + '</div>'
+          + '</div>'
+        : '<span style="font-size:11px;color:var(--text-muted);font-style:italic">Não preenchido</span>')
+      + '</div>';
+    if (aval && (aval.notes || aval.commitment)) {
+      membersHtml += '<div style="background:var(--bg-hover);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px;margin-top:-4px;border-left:3px solid ' + avalScoreColor(avg) + '">'
+        + (aval.notes ? '<div style="font-size:12px;margin-bottom:4px"><strong>↩ Reflexão:</strong> ' + escHtml(aval.notes) + '</div>' : '')
+        + (aval.commitment ? '<div style="font-size:12px"><strong>→ Compromisso:</strong> ' + escHtml(aval.commitment) + '</div>' : '')
+        + '</div>';
+    }
+  });
+  return hdrHtml + '<div id="week-section-' + weekK.replace(/[^a-z0-9]/gi, '') + '">' + membersHtml + '</div>';
+}
+
+function buildWeekBlockForMember(weekK) {
+  var cur      = getCurrentUser();
+  var wkAssess = (S.assessments || {})[weekK] || {};
+  var m        = cur ? S.team.find(function(t){ return t.id === cur.memberId; }) : null;
+  if (!m) return '';
+  var aval = wkAssess[m.id] || null;
+  var kpi  = memberWeekKPIs(m.id, weekK);
+  var rateColor = kpi.rate !== null ? (kpi.rate >= 90 ? 'var(--green)' : kpi.rate >= 70 ? 'var(--yellow)' : 'var(--red)') : 'var(--text-muted)';
+  var ak = 'am_' + weekK.replace(/[^a-z0-9]/gi, '_') + '_' + m.id.replace(/[^a-z0-9]/gi, '_');
+  if (!window._avalModalCache) window._avalModalCache = {};
+  window._avalModalCache[ak] = { memberId: m.id, weekK: weekK };
+  var out = '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px">'
+    + '<div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text-muted);margin-bottom:14px">' + weekK + '</div>'
+    + (kpi.rate !== null
+      ? '<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">'
+          + '<div style="text-align:center;padding:8px 14px;background:var(--bg-hover);border-radius:var(--radius)"><div style="font-family:JetBrains Mono,monospace;font-size:22px;font-weight:800;color:var(--accent)">' + kpi.total + '</div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">Entregas</div></div>'
+          + '<div style="text-align:center;padding:8px 14px;background:var(--bg-hover);border-radius:var(--radius)"><div style="font-family:JetBrains Mono,monospace;font-size:22px;font-weight:800;color:' + rateColor + '">' + kpi.rate + '%</div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">Taxa</div></div>'
+        + '</div>'
+      : '')
+    + (aval
+      ? '<div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:var(--radius);padding:14px;display:flex;align-items:center;gap:12px;margin-bottom:12px">'
+          + '<span style="font-size:28px">✅</span>'
+          + '<div><div style="font-weight:600">Avaliação preenchida</div><div style="font-size:12px;color:var(--text-muted)">Clique para editar</div></div>'
+          + '<button class="btn btn-s btn-sm" style="margin-left:auto" onclick="_openAvalModal(\'' + ak + '\')">✏️ Editar</button>'
+        + '</div>'
+      : '<button class="btn btn-p" style="width:100%;padding:14px" onclick="_openAvalModal(\'' + ak + '\')">⭐ Preencher minha autoavaliação</button>')
+    + '</div>';
+  return out;
+}
+
 function renderAvaliacoes() {
   destroyCharts();
-  const openWk  = S.lastWorkdayMode && S._lastWorkdayWeek ? S._lastWorkdayWeek : null;
-  const todayWk = weekKey(today());
-  const members = S.team.filter(m => m.active);
-  const admin   = isAdminUser();
+  var openWk   = (S.lastWorkdayMode && S._lastWorkdayWeek) ? S._lastWorkdayWeek : null;
+  var todayWk  = weekKey(today());
+  var admin    = isAdminUser();
 
-  // ── Non-admin: only see the open week (if any) ──
+  // Non-admin: only the open week
   if (!admin) {
     var html = '<div class="sec-hd"><div class="sec-title">⭐ Autoavaliação</div></div>';
     if (!openWk) {
       html += '<div class="empty"><div class="empty-icon">🔒</div>'
         + '<div class="empty-text">Avaliações encerradas.<br>Aguarde a liberação pelo gestor.</div></div>';
     } else {
-      html += buildWeekBlockForMember(openWk, members);
+      html += buildWeekBlockForMember(openWk);
     }
     document.getElementById('content').innerHTML = html;
     return;
   }
 
-  // ── Admin: full view ──
-  const allWeeks = Object.keys(S.assessments||{}).sort().reverse();
-  if (openWk && !allWeeks.includes(openWk)) allWeeks.unshift(openWk);
-  // Also ensure todayWk is in list for admin even if no assessments
-  if (!allWeeks.includes(todayWk)) allWeeks.push(todayWk);
-
-  function scoreColor(s) {
-    if (!s) return 'var(--text-muted)';
-    var v = parseFloat(s);
-    return v>=4 ? 'var(--green)' : v>=3 ? 'var(--yellow)' : 'var(--red)';
-  }
-
-  function buildWeekSection(weekK) {
-    var expanded  = !!_expandedWeeks[weekK];
-    var wkAssess  = (S.assessments||{})[weekK] || {};
-    var filled    = Object.keys(wkAssess).length;
-    var total     = members.length;
-    var allScores = [];
-    Object.values(wkAssess).forEach(function(a){ var av=avgScore(a); if(av) allScores.push(parseFloat(av)); });
-    var weekAvg   = allScores.length ? (allScores.reduce(function(a,b){return a+b;},0)/allScores.length).toFixed(1) : null;
-
-    var twk = 'tw_'+weekK.replace(/[^a-z0-9]/gi,'_');
-    if(!window._weekToggleCache) window._weekToggleCache={};
-    window._weekToggleCache[twk] = weekK;
-
-    var isOpen    = (weekK===openWk && S.lastWorkdayMode);
-    var isCurrent = (weekK===todayWk);
-    var badges = '';
-    if (isCurrent) badges += ' <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(99,102,241,.12);color:#6366f1;font-family:JetBrains Mono,monospace">Semana atual</span>';
-    if (isOpen)    badges += ' <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(16,185,129,.12);color:var(--green);font-family:JetBrains Mono,monospace">⭐ Aberta</span>';
-
-    var hdrHtml = '<div class="aval-week-hdr" onclick="_toggleWeekSection(\''+twk+'\')">' 
-      + '<div><div class="aval-week-title">'+weekK+badges+'</div>'
-      + '<div class="aval-week-meta">'+filled+'/'+total+' preenchidas'
-        + (weekAvg ? ' · Média: <strong style="color:'+scoreColor(weekAvg)+'">'+weekAvg+'</strong>' : '')
-      + '</div></div>'
-      + '<div style="display:flex;align-items:center;gap:8px">'
-        + '<button class="btn btn-p btn-sm" onclick="event.stopPropagation();openNextPending(\''+weekK+'\')">+ Preencher em lote</button>'
-        + '<span style="color:var(--text-muted);font-size:16px">' + (expanded?'▲':'▼') + '</span>'
-      + '</div></div>';
-
-    if (!expanded) return hdrHtml;
-
-    var membersHtml = '';
-    members.forEach(function(m) {
-      var aval   = wkAssess[m.id] || null;
-      var avg    = avgScore(aval);
-      var pc     = getPillarColor(m.pillarId);
-      var kpi    = memberWeekKPIs(m.id, weekK);
-      var rateColor = kpi.rate!==null?(kpi.rate>=90?'var(--green)':kpi.rate>=70?'var(--yellow)':'var(--red)'):'var(--text-muted)';
-      var chips  = '';
-      if (aval&&aval.scores) AVAL_CRITERIA.forEach(function(c){ var v=aval.scores[c.id]; if(v) chips+='<span class="aval-score-pill" style="background:'+scoreColor(v)+'18;color:'+scoreColor(v)+';font-size:9px">'+c.icon+' '+v+'</span>'; });
-      var ak = 'am_'+weekK.replace(/[^a-z0-9]/gi,'_')+'_'+m.id.replace(/[^a-z0-9]/gi,'_');
-      if(!window._avalModalCache) window._avalModalCache={};
-      window._avalModalCache[ak] = {memberId:m.id, weekK:weekK};
-      membersHtml += '<div class="aval-member-row" onclick="_openAvalModal(\''+ak+'\')">'
-        + renderAvatar(m.id,32,11)
-        + '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">'+escHtml(m.name)+'</div>'
-          + '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">'
-            + '<span style="font-size:10px;color:'+pc+'">'+getPillarLabel(m.pillarId)+'</span>'
-            + (kpi.rate!==null?'<span style="font-family:JetBrains Mono,monospace;font-size:10px;color:'+rateColor+'">'+kpi.rate+'% entrega</span>':'')+'</div></div>'
-        + (aval
-          ? '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px"><div style="font-family:JetBrains Mono,monospace;font-size:20px;font-weight:800;color:'+scoreColor(avg)+'">'+avg+'</div><div class="aval-score-pills">'+chips+'</div></div>'
-          : '<span style="font-size:11px;color:var(--text-muted);font-style:italic">Não preenchido</span>')
-        + '</div>';
-      if (aval&&(aval.notes||aval.commitment)) {
-        membersHtml += '<div style="background:var(--bg-hover);border-radius:var(--radius);padding:10px 14px;margin-bottom:8px;margin-top:-4px;border-left:3px solid '+scoreColor(avg)+'">'
-          + (aval.notes?'<div style="font-size:12px;margin-bottom:4px"><strong>↩ Reflexão:</strong> '+escHtml(aval.notes)+'</div>':'')
-          + (aval.commitment?'<div style="font-size:12px"><strong>→ Compromisso:</strong> '+escHtml(aval.commitment)+'</div>':'')
-          + '</div>';
-      }
-    });
-    return hdrHtml + '<div id="week-section-'+weekK.replace(/[^a-z0-9]/gi,'')+'">'+membersHtml+'</div>';
-  }
+  // Admin: all weeks
+  var allWeeks = Object.keys(S.assessments || {}).sort().reverse();
+  if (openWk && allWeeks.indexOf(openWk) === -1) allWeeks.unshift(openWk);
 
   var html = '<div class="sec-hd"><div class="sec-title">⭐ Autoavaliações Semanais</div>'
     + '<div class="sec-actions" style="gap:8px">'
-    + '<button class="btn ' + (S.lastWorkdayMode?'btn-p':'btn-s') + ' btn-sm" onclick="toggleLastWorkday()">' 
-    + (S.lastWorkdayMode?'🗓 Fechar avaliações':'🗓 Abrir avaliações') + '</button></div></div>';
+    + '<button class="btn ' + (S.lastWorkdayMode ? 'btn-p' : 'btn-s') + ' btn-sm" onclick="toggleLastWorkday()">'
+    + (S.lastWorkdayMode ? '🗓 Fechar avaliações' : '🗓 Abrir avaliações')
+    + '</button></div></div>';
 
-  // Open week first (if set and not already in list as first)
   if (openWk) {
     if (_expandedWeeks[openWk] === undefined) _expandedWeeks[openWk] = true;
-    html += buildWeekSection(openWk);
+    html += buildAvalWeekSection(openWk, openWk, todayWk);
   }
 
-  // All other weeks (excluding openWk already shown)
-  var otherWeeks = allWeeks.filter(function(w){ return w !== openWk; });
-  if (otherWeeks.length) {
+  var others = allWeeks.filter(function(w){ return w !== openWk; });
+  if (others.length) {
     html += '<div style="font-family:JetBrains Mono,monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin:20px 0 10px;display:flex;align-items:center;gap:10px">Histórico <span style="flex:1;height:1px;background:var(--border);display:block"></span></div>';
-    otherWeeks.forEach(function(w) {
+    others.forEach(function(w) {
       if (_expandedWeeks[w] === undefined) _expandedWeeks[w] = false;
-      html += buildWeekSection(w);
+      html += buildAvalWeekSection(w, openWk, todayWk);
     });
   }
 
   if (!openWk && !allWeeks.length) {
-    html += '<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Nenhuma avaliação registrada. Abra uma semana para começar.</div></div>';
+    html += '<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Nenhuma avaliação registrada. Abra uma semana em Configurações para começar.</div></div>';
   }
 
   document.getElementById('content').innerHTML = html;
-}
-
-// Non-admin single-week view
-function buildWeekBlockForMember(weekK, members) {
-  var cur      = getCurrentUser();
-  var wkAssess = (S.assessments||{})[weekK] || {};
-  var m        = cur ? S.team.find(function(t){ return t.id===cur.memberId; }) : null;
-  if (!m) return '';
-  var aval     = wkAssess[m.id] || null;
-  var ak       = 'am_'+weekK.replace(/[^a-z0-9]/gi,'_')+'_'+m.id.replace(/[^a-z0-9]/gi,'_');
-  if(!window._avalModalCache) window._avalModalCache={};
-  window._avalModalCache[ak] = {memberId:m.id, weekK:weekK};
-  var kpi = memberWeekKPIs(m.id, weekK);
-  var rateColor = kpi.rate!==null?(kpi.rate>=90?'var(--green)':kpi.rate>=70?'var(--yellow)':'var(--red)'):'var(--text-muted)';
-  var html = '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px">'
-    + '<div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text-muted);margin-bottom:14px">'+weekK+'</div>'
-    + (kpi.rate!==null?'<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">'
-      + '<div style="text-align:center;padding:8px 14px;background:var(--bg-hover);border-radius:var(--radius)"><div style="font-family:JetBrains Mono,monospace;font-size:22px;font-weight:800;color:var(--accent)">'+kpi.total+'</div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">Entregas</div></div>'
-      + '<div style="text-align:center;padding:8px 14px;background:var(--bg-hover);border-radius:var(--radius)"><div style="font-family:JetBrains Mono,monospace;font-size:22px;font-weight:800;color:'+rateColor+'">'+kpi.rate+'%</div><div style="font-size:9px;color:var(--text-muted);text-transform:uppercase">Taxa</div></div>'
-      + '</div>':'')
-    + (aval
-      ? '<div style="background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.2);border-radius:var(--radius);padding:14px;display:flex;align-items:center;gap:12px;margin-bottom:12px">'
-        + '<span style="font-size:28px">✅</span>'
-        + '<div><div style="font-weight:600">Avaliação preenchida</div><div style="font-size:12px;color:var(--text-muted)">Clique para editar</div></div>'
-        + '<button class="btn btn-s btn-sm" style="margin-left:auto" onclick="_openAvalModal(\''+ak+'\')">✏️ Editar</button>'
-        + '</div>'
-      : '<button class="btn btn-p" style="width:100%;padding:14px" onclick="_openAvalModal(\''+ak+'\')">⭐ Preencher minha autoavaliação</button>')
-    + '</div>';
-  return html;
 }
 
 function _toggleWeekSection(k) {
