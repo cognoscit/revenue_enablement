@@ -772,6 +772,7 @@ body {
       <button class="today-btn" onclick="goToday()">HOJE</button>
     </div>
     <div id="identity-chip" onclick="showIdentityModal()" style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:99px;border:1px solid var(--border);cursor:pointer;user-select:none;transition:all .2s;white-space:nowrap"><span style="font-size:11px;color:var(--text-muted)">Identificar-se →</span></div>
+<button onclick="forceSyncNow()" title="Forçar sincronização agora" style="background:none;border:none;cursor:pointer;padding:4px;font-size:14px;color:rgba(255,255,255,.5);transition:color .2s" onmouseover="this.style.color='rgba(255,255,255,.9)'" onmouseout="this.style.color='rgba(255,255,255,.5)'">⟳</button>
 <div class="od-indicator od-disconnected" id="od-indicator" onclick="setView('settings')" title="Clique para configurar Supabase">☁ Supabase</div>
 <button class="header-print-btn" onclick="window.print()" title="Imprimir ritual" id="print-btn">🖨</button>
     <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn" title="Alternar tema">🌙</button>
@@ -949,9 +950,11 @@ function sbReady() { return !!(SB_URL && SB_KEY); }
 function sbBase()  { return SB_URL.replace(/\/+$/, "") + "/rest/v1/"; }
 function sbHdr(extra) {
   return Object.assign({
-    "apikey":        SB_KEY,
-    "Authorization": "Bearer " + SB_KEY,
-    "Content-Type":  "application/json",
+    "apikey":          SB_KEY,
+    "Authorization":   "Bearer " + SB_KEY,
+    "Content-Type":    "application/json",
+    "Cache-Control":   "no-cache, no-store",
+    "Pragma":          "no-cache",
   }, extra||{});
 }
 
@@ -961,16 +964,24 @@ function startBgSync() {
   if (!sbReady()) return;
   clearInterval(_bgPullTimer);
   _bgPullTimer = setInterval(async function() {
-    // Only pull if not currently syncing and no dirty items pending
-    if (_dirtyItems.size > 0 || _configDirty) return;
     var result = await pullFromOneDrive();
     if (result) {
       migrateRecurring();
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
       renderSidebar(); render();
-      setOdStatus("synced", "Live: " + new Date().toLocaleTimeString("pt-BR"));
+      var ts = new Date().toLocaleTimeString("pt-BR");
+      // If we have local dirty items, show pending + last pull time
+      var dirty = _dirtyItems.size + (_configDirty ? 1 : 0);
+      if (dirty > 0) {
+        setOdStatus("syncing", "Atualizando... " + dirty + " item(s) na fila");
+        pushToOneDrive(); // flush dirty immediately after pull
+      } else {
+        setOdStatus("synced", "Atualizado: " + ts);
+      }
+    } else {
+      setOdStatus("offline", "Sem conexão com Supabase");
     }
-  }, 30000); // pull every 30s
+  }, 15000); // pull every 15s (was 30s — faster updates for team use)
 }
 
 // ── Indicador header ──
@@ -1077,7 +1088,8 @@ async function pushToOneDrive() {
 
   if (allOk) {
     _lastSyncedAt = new Date();
-    setOdStatus("synced", "Sync: " + _lastSyncedAt.toLocaleTimeString("pt-BR"));
+    var pendingCount = _dirtyItems.size + (_configDirty ? 1 : 0);
+    setOdStatus("synced", "Enviado: " + _lastSyncedAt.toLocaleTimeString("pt-BR"));
     // Clear persisted dirty queue — all confirmed
     try { localStorage.removeItem("rg_dirty_queue"); } catch(e) {}
   } else {
@@ -1145,11 +1157,15 @@ async function pullFromOneDrive() {
   if (!rows && !cfgRow) return null;
 
   // Apply config (only if not locally dirty)
-  if (cfgRow && cfgRow.data && !_configDirty) {
+  if (cfgRow && cfgRow.data) {
     var cfg = cfgRow.data;
-    var remTs  = new Date(cfgRow.updated_at||0).getTime();
-    var locTs  = new Date(S._lastEditedAt||0).getTime();
-    if (remTs >= locTs) {
+    // Non-admin: always apply remote config (they don't edit config locally)
+    // Admin: apply if remote is newer OR if not locally dirty
+    var adminUser = isAdminUser && isAdminUser();
+    var remTs     = new Date(cfgRow.updated_at||0).getTime();
+    var locTs     = new Date(S._lastEditedAt||0).getTime();
+    var applyConfig = !adminUser || !_configDirty || remTs > locTs;
+    if (applyConfig) {
       if (cfg.team)            S.team            = cfg.team;
       if (cfg.pillars)         S.pillars         = cfg.pillars;
       if (cfg.recurring)       S.recurring       = cfg.recurring;
@@ -1223,6 +1239,19 @@ async function firstTimePush() {
 }
 
 function odLogout() { setOdStatus("disconnected"); }
+
+async function forceSyncNow() {
+  setOdStatus("syncing", "Sincronizando...");
+  var result = await pullFromOneDrive();
+  if (result) {
+    migrateRecurring();
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
+    renderSidebar(); render();
+  }
+  if (_dirtyItems.size > 0 || _configDirty) await pushToOneDrive();
+  else setOdStatus("synced", "Atualizado: " + new Date().toLocaleTimeString("pt-BR"));
+  toast("✅ Sincronização concluída", "green");
+}
 
 // ────────────────────────────────────────────────
 // SAVE — mark specific items dirty, debounce push
@@ -4427,11 +4456,35 @@ function confirmDelKPI(id){openModal({title:'🗑 Excluir KPI',body:`<div style=
 // ═══════════════════════════════════════════════════
 // EXPORT / IMPORT — JSON
 // ═══════════════════════════════════════════════════
-function exportState(){
-  const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
+async function exportState(){
+  // Pull fresh data from Supabase before exporting
+  if (sbReady()) {
+    setOdStatus("syncing", "Buscando dados completos...");
+    await pullFromOneDrive();
+    migrateRecurring();
+    setOdStatus("synced", "Atualizado: "+new Date().toLocaleTimeString("pt-BR"));
+  }
+  // Build complete export with all fields
+  var exportData = JSON.parse(JSON.stringify(S));
+  exportData._meta = {
+    exportedAt:   new Date().toISOString(),
+    exportedBy:   getCurrentUser() ? getCurrentUser().name : 'desconhecido',
+    appVersion:   'RG SDM Revenue Enablement 2026',
+    totalDays:    Object.keys(exportData.days||{}).length,
+    totalItems:   Object.values(exportData.days||{}).reduce(function(n,d){return n+(d.deliverables||[]).length;},0),
+    totalMembers: (exportData.team||[]).filter(function(m){return m.active;}).length,
+    totalRecurring: (exportData.recurring||[]).length,
+    totalHolidays:  Object.keys(exportData.holidays||{}).length,
+    totalAssessments: Object.values(exportData.assessments||{}).reduce(function(n,w){return n+Object.keys(w).length;},0),
+  };
+  const blob=new Blob([JSON.stringify(exportData,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download=`RG_RevEnablement_${today()}.json`;a.click();URL.revokeObjectURL(url);
-  toast('✅ JSON exportado','green');
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='RG_RevEnablement_COMPLETO_'+today()+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('✅ JSON completo exportado — '+exportData._meta.totalItems+' entregáveis, '+exportData._meta.totalDays+' dias','green');
 }
 function importFile(input){
   const file=input.files[0];if(!file)return;
