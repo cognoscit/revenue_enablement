@@ -3877,7 +3877,7 @@ function saveFolgaModal(dateStr) {
   if (startDate === endDate) {
     if (!S.holidays) S.holidays = {};
     S.holidays[startDate] = { label: label, memberIds: memberIds, category: cat };
-    save(); render(); updateHolidayBadge();
+    _configDirty = true; save(); render(); updateHolidayBadge();
     toast('🏖 ' + (cat==='ferias'?'Férias':'Folga') + ' definida: ' + fmtShort(startDate), 'purple');
   } else {
     setHolidayRange(startDate, endDate, label, memberIds, workdaysOnly, cat);
