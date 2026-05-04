@@ -1020,7 +1020,7 @@ async function handleRealtimeConfig(payload) {
     if (cfg.lastWorkdayMode  !== undefined) S.lastWorkdayMode  = cfg.lastWorkdayMode;
     if (cfg._lastWorkdayWeek !== undefined) S._lastWorkdayWeek = cfg._lastWorkdayWeek;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
-    renderSidebar(); render(); updateAvalBadge();
+    renderSidebar(); render(); updateAvalBadge(); updateHolidayBadge();
     setOdStatus('synced', '● Live: ' + new Date().toLocaleTimeString('pt-BR'));
   } else if (!_configDirty) {
     // Admin only if not locally dirty
@@ -1030,7 +1030,7 @@ async function handleRealtimeConfig(payload) {
     if (cfg.lastWorkdayMode  !== undefined) S.lastWorkdayMode  = cfg.lastWorkdayMode;
     if (cfg._lastWorkdayWeek !== undefined) S._lastWorkdayWeek = cfg._lastWorkdayWeek;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
-    renderSidebar(); render(); updateAvalBadge();
+    renderSidebar(); render(); updateAvalBadge(); updateHolidayBadge();
     setOdStatus('synced', '● Live: ' + new Date().toLocaleTimeString('pt-BR'));
   }
 }
@@ -3708,7 +3708,7 @@ function isMemberOnFolga(dateStr, memberId) {
 function setHoliday(dateStr, label, memberIds) {
   if (!S.holidays) S.holidays = {};
   S.holidays[dateStr] = { label: label||'Folga', memberIds: memberIds||[], category: 'folga' };
-  save(); render(); updateHolidayBadge();
+  _configDirty = true; save(); render(); updateHolidayBadge();
 }
 
 // Set holiday for a date range (inclusive, dias úteis only if requested)
@@ -3726,14 +3726,14 @@ function setHolidayRange(startDate, endDate, label, memberIds, workdaysOnly, cat
     }
     cur = nextDay(cur);
   }
-  save(); render(); updateHolidayBadge();
+  _configDirty = true; save(); render(); updateHolidayBadge();
   toast('🏖 ' + count + ' dia(s) de folga definidos', 'purple');
 }
 
 // Remove folga
 function removeHoliday(dateStr) {
   if (S.holidays) delete S.holidays[dateStr];
-  save(); render(); updateHolidayBadge();
+  _configDirty = true; save(); render(); updateHolidayBadge();
   toast('✓ Folga removida: ' + fmtShort(dateStr), 'green');
 }
 
@@ -3746,7 +3746,7 @@ function removeHolidayRange(startDate, endDate) {
     if (S.holidays[cur]) { delete S.holidays[cur]; count++; }
     cur = nextDay(cur);
   }
-  save(); render(); updateHolidayBadge();
+  _configDirty = true; save(); render(); updateHolidayBadge();
   toast('✓ ' + count + ' dia(s) de folga removidos', 'green');
 }
 
@@ -5019,7 +5019,7 @@ function confirmDeleteGroup(days, label) {
 function deleteGroupDays(days) {
   if (!S.holidays) return;
   days.forEach(ds => { delete S.holidays[ds]; });
-  save(); render(); updateHolidayBadge();
+  _configDirty = true; save(); render(); updateHolidayBadge();
   toast('🗑 ' + days.length + ' dia(s) removidos', 'yellow');
 }
 
