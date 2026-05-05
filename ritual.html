@@ -1521,6 +1521,7 @@ function runMigrationManual() {
   migrateRecurring();
   const after = S.recurring.length;
   const novos = after - before;
+  _configDirty = true;
   save();
   render();
   toast(novos > 0
@@ -1674,7 +1675,7 @@ function materializeVirtual(dateStr, virtualItem) {
   delete real._reminderFor;
   delete real._sourceDate;
   S.days[dateStr].deliverables.push(real);
-  save();
+  save(dateStr);
   render();   // update panel immediately so stale DOM doesn't cause ghost interactions
   return real.id;
 }
@@ -1706,7 +1707,7 @@ function skipRecurringOnDate(dateStr, virtualItem) {
   if(!S.days[dateStr].deliverables.find(d=>d.recurringSourceId===srcId)){
     S.days[dateStr].deliverables.push({id:genId(),recurringSourceId:srcId,_skipMarker:true,status:'cancelled',createdAt:new Date().toISOString()});
   }
-  save(); render();
+  save(dateStr); render();
   toast('🗑 Ocorrência removida para este dia','yellow');
 }
 
@@ -1857,7 +1858,7 @@ function isApuracaoConcluida() {
 function genId() { return '_'+Math.random().toString(36).substr(2,9); }
 function ensureDay(s) { if(!S.days[s]) S.days[s]={deliverables:[],notes:''}; if(!S.days[s].deliverables) S.days[s].deliverables=[]; if(S.days[s].notes===undefined) S.days[s].notes=''; }
 
-function addDel(dateStr, data) { ensureDay(dateStr); S.days[dateStr].deliverables.push({id:genId(),createdAt:new Date().toISOString(),status:'pending',notes:'',blocker:false,...data}); save(); render(); }
+function addDel(dateStr, data) { ensureDay(dateStr); S.days[dateStr].deliverables.push({id:genId(),createdAt:new Date().toISOString(),status:'pending',notes:'',blocker:false,...data}); save(dateStr); render(); }
 function updDel(dateStr, id, updates) { ensureDay(dateStr); const idx=S.days[dateStr].deliverables.findIndex(d=>d.id===id); if(idx!==-1){S.days[dateStr].deliverables[idx]={...S.days[dateStr].deliverables[idx],...updates}; save(dateStr); render(); updateLtBadge();} }
 function delDel(dateStr, id) {
   if(!S.days[dateStr]) return;
@@ -1952,7 +1953,7 @@ function markAllDone(dateStr) {
   toast(`✅ ${pending.length} item(s) marcados como Entregues`,'green');
 }
 
-function saveNotes(dateStr, val) { ensureDay(dateStr); S.days[dateStr].notes=val; save(); }
+function saveNotes(dateStr, val) { ensureDay(dateStr); S.days[dateStr].notes=val; save(dateStr); }
 
 // ═══════════════════════════════════════════════════
 // TEMPLATE ACTIONS
@@ -1967,7 +1968,7 @@ function applyTemplates(dateStr) {
     const already=getDels(dateStr).some(del=>del.templateId===t.id);
     if(!already){ S.days[dateStr].deliverables.push({id:genId(),templateId:t.id,description:t.description,memberId:t.memberId,category:t.category,priority:t.priority,deadline:t.deadline,status:'pending',notes:'',blocker:false,createdAt:new Date().toISOString()}); added++; }
   });
-  save(); render();
+  save(dateStr); render();
   toast(`🔁 ${added} template(s) aplicado(s)`,'blue');
 }
 
@@ -3435,7 +3436,7 @@ function renderSettings() {
   </div>
   <div class="settings-card">
     <div class="scrd-title">Geral</div>
-    <div class="srow"><div><div class="srow-lbl">Nome da Aplicação</div></div><input class="fi" style="width:260px" value="${escHtml(s.appName)}" onchange="S.settings.appName=this.value;save()"></div>
+    <div class="srow"><div><div class="srow-lbl">Nome da Aplicação</div></div><input class="fi" style="width:260px" value="${escHtml(s.appName)}" onchange="_configDirty=true;S.settings.appName=this.value;save()"></div>
     <div class="srow"><div><div class="srow-lbl">Tema</div><div class="srow-desc">Aparência da interface</div></div>
       <div style="display:flex;gap:8px;">
         <button class="btn ${S.theme==='dark'?'btn-p':'btn-s'} btn-sm" onclick="S.theme='dark';save();applyTheme()">🌙 Escuro</button>
@@ -3443,7 +3444,7 @@ function renderSettings() {
       </div>
     </div>
     <div class="srow"><div><div class="srow-lbl">Carrego Automático</div><div class="srow-desc">Sugerir carry over de itens perdidos automaticamente</div></div>
-      <div class="toggle-wrap" onclick="S.settings.autoCarryOver=!S.settings.autoCarryOver;save();renderSettings()"><div class="toggle-sw ${s.autoCarryOver?'on':''}"></div><span class="toggle-lbl">${s.autoCarryOver?'Ativo':'Inativo'}</span></div>
+      <div class="toggle-wrap" onclick="_configDirty=true;S.settings.autoCarryOver=!S.settings.autoCarryOver;save();renderSettings()"><div class="toggle-sw ${s.autoCarryOver?'on':''}"></div><span class="toggle-lbl">${s.autoCarryOver?'Ativo':'Inativo'}</span></div>
     </div>
   </div>
   <div class="settings-card">
@@ -4212,6 +4213,7 @@ function submitDel(dateStr,editId){
     const isDayItem = editId && getDels(dateStr).some(d => d.id === editId);
     if(!isDayItem){
       // Creating or editing a recurring SOURCE in S.recurring
+      _configDirty = true;
       const freq=document.getElementById('f-freq')?.value||'daily';
       const recStart=document.getElementById('f-rec-start')?.value||dateStr;
       const recEnd=document.getElementById('f-rec-end')?.value||'';
@@ -4365,7 +4367,7 @@ function skipThisOccurrence(dateStr, itemId, srcId) {
   const marker={id:genId(),recurringSourceId:srcId,_skipMarker:true,status:'cancelled',createdAt:new Date().toISOString()};
   if(idx!==-1) S.days[dateStr].deliverables[idx]=marker;
   else S.days[dateStr].deliverables.push(marker);
-  save(); render();
+  save(dateStr); render();
   toast('🗑 Ocorrência removida para este dia','yellow');
 }
 function removeRecurringSource(srcId){
@@ -4413,6 +4415,7 @@ function submitMember(editId){
   const data={name,role,pillarId,email,active:true};
   if(editId){const m=S.team.find(x=>x.id===editId);if(m)Object.assign(m,data);}
   else S.team.push({id:genId(),...data});
+  _configDirty = true;
   save();closeModal();renderSidebar();
   if(view==='team')renderTeam();else render();
   toast(`✅ Membro ${editId?'atualizado':'adicionado'}`,'green');
@@ -4453,6 +4456,7 @@ function submitPillar(editId){
   if(!label){toast('❌ Nome obrigatório','red');return;}
   if(editId){const p=S.pillars.find(x=>x.id===editId);if(p)Object.assign(p,{label,color,icon});}
   else S.pillars.push({id:genId(),label,color,icon});
+  _configDirty = true;
   save();closeModal();renderSidebar();
   if(view==='team')renderTeam();else render();
   toast(`✅ Pilar ${editId?'atualizado':'criado'}`,'green');
@@ -4507,6 +4511,7 @@ function submitTpl(editId){
   const data={description:desc,memberId,deadline,priority,category,days,active:true};
   if(editId){const t=S.templates.find(x=>x.id===editId);if(t)Object.assign(t,data);}
   else S.templates.push({id:genId(),...data});
+  _configDirty = true;
   save();closeModal();if(view==='templates')renderTemplates();
   toast(`✅ Template ${editId?'atualizado':'criado'}`,'green');
 }
@@ -4551,6 +4556,7 @@ function submitKPI(editId){
   const data={name,metric,target,pillarId,memberId,color,enabled:true};
   if(editId){const k=S.kpis.find(x=>x.id===editId);if(k)Object.assign(k,data);}
   else S.kpis.push({id:genId(),...data});
+  _configDirty = true;
   save();closeModal();if(view==='kpis')renderKPIs();else render();
   toast(`✅ KPI ${editId?'atualizado':'criado'}`,'green');
 }
@@ -4841,6 +4847,7 @@ function processExcelImport(){
     if(added)summary.push(`Notas: ${added} dia(s) importados`);
   }
 
+  _configDirty = true;
   save(); closeModal(); renderSidebar(); render();
   toast('✅ Importação concluída: '+summary.join(' · '),'green');
   setTimeout(()=>openModal({title:'✅ Importação Concluída',body:`<div style="padding:10px 0">${summary.map(s=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13.5px;">✓ ${s}</div>`).join('')}</div>`,foot:`<button class="btn btn-p" onclick="closeModal()">OK</button>`}),300);
@@ -5692,6 +5699,7 @@ function toggleLastWorkday() {
     S._lastWorkdayWeek = weekKey(today());
     S.lastWorkdayMode  = true;
   }
+  _configDirty = true;
   save();
   updateAvalBadge();
   render();
@@ -5712,7 +5720,8 @@ function checkLastWorkdayAutoReset() {
   if (weekDiff > 1) {  // auto-close only if >1 week has passed since selected week
     S.lastWorkdayMode  = false;
     S._lastWorkdayWeek = null;
-    save();
+    _configDirty = true;
+  save();
     updateAvalBadge();
   }
 }
