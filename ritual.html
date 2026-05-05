@@ -1081,17 +1081,30 @@ function startBgSync() {
 }
 
 async function pollOnce() {
+  // Snapshot of current state before pull to detect real changes
+  var beforeTs  = S._lastEditedAt || '';
+  var beforeSize = Object.values(S.days||{}).reduce(function(n,d){return n+(d.deliverables||[]).length;},0);
+
   var result = await pullFromOneDrive();
   if (!result) { setOdStatus('offline', 'Sem conexão'); return; }
+
+  var afterTs   = S._lastEditedAt || '';
+  var afterSize = Object.values(S.days||{}).reduce(function(n,d){return n+(d.deliverables||[]).length;},0);
+  var changed   = (afterTs !== beforeTs) || (afterSize !== beforeSize);
+
   migrateRecurring();
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
-  renderSidebar(); render();
-  var dirty = _dirtyItems.size + (_configDirty ? 1 : 0);
-  if (dirty > 0) {
-    pushToOneDrive();
+
+  // Only re-render if data actually changed — prevents scroll reset on idle polls
+  if (changed) {
+    renderSidebar(); render();
+    setOdStatus('synced', '↻ ' + new Date().toLocaleTimeString('pt-BR'));
   } else {
-    setOdStatus('synced', 'Atualizado: ' + new Date().toLocaleTimeString('pt-BR'));
+    setOdStatus('synced', '✓ ' + new Date().toLocaleTimeString('pt-BR'));
   }
+
+  var dirty = _dirtyItems.size + (_configDirty ? 1 : 0);
+  if (dirty > 0) pushToOneDrive();
 }
 
 // Fallback polling — 5s for immediate team collaboration
@@ -6185,6 +6198,11 @@ function _doSetView(v){
 }
 
 function render(){
+  // Save scroll position before re-render
+  var _contentEl = document.getElementById('content');
+  var _scrollTop = _contentEl ? _contentEl.scrollTop : 0;
+  var _scrollLeft = _contentEl ? _contentEl.scrollLeft : 0;
+
   // Block all rendering until user is identified
   if (!getCurrentUser() || !S.team.find(function(m){ var c=getCurrentUser(); return c && m.id===c.memberId && m.active; })) {
     document.getElementById('content').innerHTML =
@@ -6214,7 +6232,12 @@ function render(){
     case 'kpis':     renderKPIs(); break;
     case 'settings': renderSettings(); break;
   }
-}
+
+  // Restore scroll position after re-render
+  if (_contentEl) {
+    _contentEl.scrollTop  = _scrollTop;
+    _contentEl.scrollLeft = _scrollLeft;
+  }}
 
 // ═══════════════════════════════════════════════════
 // UTILS
