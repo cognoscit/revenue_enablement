@@ -908,7 +908,7 @@ function loadSeedIfNeeded() {
       S = JSON.parse(JSON.stringify(SEED_DATA));
       if (!S.recurring) S.recurring = [];
       migrateRecurring();
-      save();
+      _configDirty=true; save();
       console.log('[RG] Seed carregado:', S.team.length, 'membros,', S.recurring.length, 'recorrentes');
       return true;
     }
@@ -1716,7 +1716,7 @@ function stopRecurringFrom(srcId, fromDate) {
   const src = (S.recurring || []).find(r => r.id === srcId);
   if (src && src.recurrence) {
     src.recurrence.endDate = fromDate;
-    save(); render();
+    _configDirty=true; save(); render();
     toast('⏹ Recorrência encerrada a partir de ' + fmtShort(fromDate), 'purple');
   }
 }
@@ -1756,7 +1756,7 @@ function applyTheme() {
   const btn = document.getElementById('theme-btn');
   if (btn) btn.textContent = S.theme === 'dark' ? '☀️' : '🌙';
 }
-function toggleTheme() { S.theme = S.theme === 'dark' ? 'light' : 'dark'; save(); applyTheme(); }
+function toggleTheme() { S.theme = S.theme === 'dark' ? 'light' : 'dark'; _configDirty=true; save(); applyTheme(); }
 
 // ═══════════════════════════════════════════════════
 // PILLAR HELPERS (dynamic)
@@ -1933,7 +1933,7 @@ function carryOver(fromDate, id) {
   const toDate=nextDay(fromDate);
   ensureDay(toDate);
   S.days[toDate].deliverables.push({...item,id:genId(),status:'pending',carriedFrom:fromDate,createdAt:new Date().toISOString()});
-  save(); render();
+  save(toDate); render();
   toast('↪ Carregado para '+fmtShort(toDate),'purple');
 }
 
@@ -1949,7 +1949,7 @@ function markAllDone(dateStr) {
   if(!pending.length){toast('Nenhum item pendente','yellow');return;}
   ensureDay(dateStr);
   pending.forEach(item=>{ const idx=S.days[dateStr].deliverables.findIndex(d=>d.id===item.id); if(idx!==-1) S.days[dateStr].deliverables[idx].status='done'; });
-  save(); render();
+  save(dateStr); render();
   toast(`✅ ${pending.length} item(s) marcados como Entregues`,'green');
 }
 
@@ -2735,7 +2735,7 @@ function renderTeam() {
   document.getElementById('content').innerHTML=html;
 }
 
-function toggleActive(id){const m=S.team.find(x=>x.id===id);if(m){m.active=!m.active;save();renderTeam();renderSidebar();}}
+function toggleActive(id){const m=S.team.find(x=>x.id===id);if(m){m.active=!m.active;_configDirty=true; save();renderTeam();renderSidebar();}}
 
 // ═══════════════════════════════════════════════════
 // RENDER: HISTORY
@@ -2869,7 +2869,7 @@ function renderTemplates() {
   document.getElementById('content').innerHTML=html;
 }
 
-function toggleTemplate(id){const t=S.templates.find(x=>x.id===id);if(t){t.active=!t.active;save();renderTemplates();}}
+function toggleTemplate(id){const t=S.templates.find(x=>x.id===id);if(t){t.active=!t.active;_configDirty=true; save();renderTemplates();}}
 
 
 // ═══════════════════════════════════════════════════
@@ -2942,7 +2942,7 @@ function openAddRecurring(){
 }
 function toggleRecurring(id){
   const src=(S.recurring||[]).find(r=>r.id===id);
-  if(src){src.active=!src.active;save();renderRecurring();}
+  if(src){src.active=!src.active;_configDirty=true; save();renderRecurring();}
 }
 
 
@@ -3391,7 +3391,7 @@ function renderKPIs() {
   html+=`</div>`;
   document.getElementById('content').innerHTML=html;
 }
-function toggleKPI(id){const k=S.kpis.find(x=>x.id===id);if(k){k.enabled=!k.enabled;save();renderKPIs();}}
+function toggleKPI(id){const k=S.kpis.find(x=>x.id===id);if(k){k.enabled=!k.enabled;_configDirty=true; save();renderKPIs();}}
 
 // ═══════════════════════════════════════════════════
 // RENDER: SETTINGS
@@ -3415,7 +3415,7 @@ function renderSettings() {
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-s btn-sm" onclick="odLogin()">↻ Sincronizar agora</button>
         <button class="btn btn-s btn-sm" onclick="pushToOneDrive().then(function(ok){if(ok)toast('Enviado ao Supabase','green')})">↑ Forçar envio</button>
-        <button class="btn btn-s btn-sm" onclick="pullFromOneDrive().then(function(d){if(d){S=d;save();render();toast('Carregado','green');}else toast('Sem dados','yellow')})">↓ Forçar download</button>
+        <button class="btn btn-s btn-sm" onclick="pullFromOneDrive().then(function(d){if(d){S=d;_configDirty=true;Object.keys(S.days||{}).forEach(function(dk){(S.days[dk].deliverables||[]).forEach(function(item){_dirtyItems.set(item.id,{dateKey:dk,item:item});});});save();render();toast('Carregado','green');}else toast('Sem dados','yellow')})">↓ Forçar download</button>
       </div>
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
         <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--text-secondary)">Usuário identificado neste browser</div>
@@ -4420,7 +4420,7 @@ function submitMember(editId){
   if(view==='team')renderTeam();else render();
   toast(`✅ Membro ${editId?'atualizado':'adicionado'}`,'green');
 }
-function confirmDelMember(id){openModal({title:'🗑 Excluir Membro',body:`<div style="text-align:center;padding:20px;color:var(--text-muted)">Histórico mantido. Deseja continuar?</div>`,foot:`<button class="btn btn-s" onclick="closeModal()">Cancelar</button><button class="btn btn-d" onclick="S.team=S.team.filter(m=>m.id!=='${id}');save();closeModal();renderSidebar();if(view==='team')renderTeam();else render();toast('🗑 Membro removido','yellow')">Excluir</button>`});}
+function confirmDelMember(id){openModal({title:'🗑 Excluir Membro',body:`<div style="text-align:center;padding:20px;color:var(--text-muted)">Histórico mantido. Deseja continuar?</div>`,foot:`<button class="btn btn-s" onclick="closeModal()">Cancelar</button><button class="btn btn-d" onclick="S.team=S.team.filter(m=>m.id!=='${id}');_configDirty=true; save();closeModal();renderSidebar();if(view==='team')renderTeam();else render();toast('🗑 Membro removido','yellow')">Excluir</button>`});}
 
 // ── PILLAR MODAL ──
 const PILLAR_ICONS=['📦','🛒','💳','🎧','📊','🏭','🔄','📋','🚚','💼','🏗','🎯','⚡','🔍','📌'];
@@ -4463,7 +4463,7 @@ function submitPillar(editId){
 }
 function confirmDelPillar(id){
   const mc=pillarMemberCount(id);
-  openModal({title:'🗑 Excluir Pilar',body:`<div style="text-align:center;padding:20px;color:var(--text-muted)">${mc>0?`Este pilar tem <strong>${mc}</strong> membro(s) ativo(s). Eles ficarão sem pilar atribuído. `:''}Deseja continuar?</div>`,foot:`<button class="btn btn-s" onclick="closeModal()">Cancelar</button><button class="btn btn-d" onclick="S.pillars=S.pillars.filter(p=>p.id!=='${id}');save();closeModal();renderSidebar();if(view==='team')renderTeam();else render();toast('🗑 Pilar removido','yellow')">Excluir</button>`});
+  openModal({title:'🗑 Excluir Pilar',body:`<div style="text-align:center;padding:20px;color:var(--text-muted)">${mc>0?`Este pilar tem <strong>${mc}</strong> membro(s) ativo(s). Eles ficarão sem pilar atribuído. `:''}Deseja continuar?</div>`,foot:`<button class="btn btn-s" onclick="closeModal()">Cancelar</button><button class="btn btn-d" onclick="S.pillars=S.pillars.filter(p=>p.id!=='${id}');_configDirty=true; save();closeModal();renderSidebar();if(view==='team')renderTeam();else render();toast('🗑 Pilar removido','yellow')">Excluir</button>`});
 }
 
 // ── TEMPLATE MODAL ──
@@ -4515,7 +4515,7 @@ function submitTpl(editId){
   save();closeModal();if(view==='templates')renderTemplates();
   toast(`✅ Template ${editId?'atualizado':'criado'}`,'green');
 }
-function confirmDelTpl(id){openModal({title:'🗑 Excluir Template',body:`<div style="text-align:center;padding:20px;color:var(--text-muted)">Deseja excluir este template?</div>`,foot:`<button class="btn btn-s" onclick="closeModal()">Cancelar</button><button class="btn btn-d" onclick="S.templates=S.templates.filter(t=>t.id!=='${id}');save();closeModal();if(view==='templates')renderTemplates();toast('🗑 Template removido','yellow')">Excluir</button>`});}
+function confirmDelTpl(id){openModal({title:'🗑 Excluir Template',body:`<div style="text-align:center;padding:20px;color:var(--text-muted)">Deseja excluir este template?</div>`,foot:`<button class="btn btn-s" onclick="closeModal()">Cancelar</button><button class="btn btn-d" onclick="S.templates=S.templates.filter(t=>t.id!=='${id}');_configDirty=true; save();closeModal();if(view==='templates')renderTemplates();toast('🗑 Template removido','yellow')">Excluir</button>`});}
 
 // ── KPI MODAL ──
 function openAddKPI(){showKPIModal(null,null);}
@@ -4560,7 +4560,7 @@ function submitKPI(editId){
   save();closeModal();if(view==='kpis')renderKPIs();else render();
   toast(`✅ KPI ${editId?'atualizado':'criado'}`,'green');
 }
-function confirmDelKPI(id){openModal({title:'🗑 Excluir KPI',body:`<div style="text-align:center;padding:20px;color:var(--text-muted)">Deseja excluir este KPI?</div>`,foot:`<button class="btn btn-s" onclick="closeModal()">Cancelar</button><button class="btn btn-d" onclick="S.kpis=S.kpis.filter(k=>k.id!=='${id}');save();closeModal();if(view==='kpis')renderKPIs();else render();toast('🗑 KPI removido','yellow')">Excluir</button>`});}
+function confirmDelKPI(id){openModal({title:'🗑 Excluir KPI',body:`<div style="text-align:center;padding:20px;color:var(--text-muted)">Deseja excluir este KPI?</div>`,foot:`<button class="btn btn-s" onclick="closeModal()">Cancelar</button><button class="btn btn-d" onclick="S.kpis=S.kpis.filter(k=>k.id!=='${id}');_configDirty=true; save();closeModal();if(view==='kpis')renderKPIs();else render();toast('🗑 KPI removido','yellow')">Excluir</button>`});}
 
 // ═══════════════════════════════════════════════════
 // EXPORT / IMPORT — JSON
@@ -4598,7 +4598,8 @@ async function exportState(){
 function importFile(input){
   const file=input.files[0];if(!file)return;
   const r=new FileReader();
-  r.onload=e=>{try{const imp=JSON.parse(e.target.result);if(!imp.team||!imp.days)throw new Error('Formato inválido');S=imp;if(!S.pillars)S.pillars=defaultState().pillars;if(!S.templates)S.templates=[];save();applyTheme();renderSidebar();render();toast('✅ JSON importado com sucesso','green');}catch(err){toast('❌ Erro: '+err.message,'red');}};
+  r.onload=e=>{try{const imp=JSON.parse(e.target.result);if(!imp.team||!imp.days)throw new Error('Formato inválido');S=imp;if(!S.pillars)S.pillars=defaultState().pillars;if(!S.templates)S.templates=[];_configDirty=true; Object.keys(imp.days||{}).forEach(function(dk){(imp.days[dk].deliverables||[]).forEach(function(item){_dirtyItems.set(item.id,{dateKey:dk,item:item});});});
+  save();applyTheme();renderSidebar();render();toast('✅ JSON importado com sucesso','green');}catch(err){toast('❌ Erro: '+err.message,'red');}};
   r.readAsText(file);input.value='';
 }
 
@@ -4848,6 +4849,13 @@ function processExcelImport(){
   }
 
   _configDirty = true;
+  // Mark all imported days dirty for Supabase sync
+  Object.keys(S.days||{}).forEach(function(dk){
+    (S.days[dk].deliverables||[]).forEach(function(item){
+      _dirtyItems.set(item.id,{dateKey:dk,item:item});
+    });
+  });
+  _configDirty=true;
   save(); closeModal(); renderSidebar(); render();
   toast('✅ Importação concluída: '+summary.join(' · '),'green');
   setTimeout(()=>openModal({title:'✅ Importação Concluída',body:`<div style="padding:10px 0">${summary.map(s=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13.5px;">✓ ${s}</div>`).join('')}</div>`,foot:`<button class="btn btn-p" onclick="closeModal()">OK</button>`}),300);
@@ -4981,7 +4989,7 @@ function submitBatch(){
   valid.forEach(row=>{
     S.days[_batchDate].deliverables.push({id:genId(),createdAt:new Date().toISOString(),...row});
   });
-  save();closeModal();render();
+  save(dateStr);closeModal();render();
   toast(`✅ ${valid.length} atividade(s) adicionadas${skipped.length?` · ${skipped.length} linha(s) ignoradas`:''}`, 'green');
 }
 
