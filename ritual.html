@@ -976,28 +976,33 @@ function initSupabaseClient() {
 }
 
 async function handleRealtimeDeliverable(payload) {
-  // Called when any row in rg_sdm_deliverables changes
-  var ev   = payload.eventType;  // INSERT, UPDATE, DELETE
-  var row  = payload.new || payload.old;
+  var ev      = payload.eventType;
+  var row     = payload.new || payload.old;
   if (!row) return;
   var itemId  = row.id;
   var dateKey = row.date_key;
 
-  // Don't overwrite locally dirty items
-  if (_dirtyItems.has(itemId)) return;
+  if (_dirtyItems.has(itemId)) return; // local pending write wins
 
   if (ev === 'DELETE') {
     if (S.days && S.days[dateKey]) {
       S.days[dateKey].deliverables = (S.days[dateKey].deliverables||[]).filter(function(d){ return d.id !== itemId; });
     }
   } else {
-    // INSERT or UPDATE — fetch the actual data (row.data may be null in some configs)
-    if (row.data) {
+    var itemData = row.data;
+    // row.data can be null for large JSONB — fetch directly if needed
+    if (!itemData) {
+      try {
+        var r = await fetch(sbBase()+'rg_sdm_deliverables?id=eq.'+encodeURIComponent(itemId)+'&select=data', { headers: sbHdr() });
+        if (r.ok) { var rows = await r.json(); itemData = rows[0] && rows[0].data; }
+      } catch(e) {}
+    }
+    if (itemData) {
       if (!S.days) S.days = {};
       if (!S.days[dateKey]) S.days[dateKey] = { deliverables: [], notes: '' };
       var idx = S.days[dateKey].deliverables.findIndex(function(d){ return d.id === itemId; });
-      if (idx !== -1) S.days[dateKey].deliverables[idx] = row.data;
-      else            S.days[dateKey].deliverables.push(row.data);
+      if (idx !== -1) S.days[dateKey].deliverables[idx] = itemData;
+      else            S.days[dateKey].deliverables.push(itemData);
     }
   }
 
@@ -1037,54 +1042,62 @@ async function handleRealtimeConfig(payload) {
 
 function startBgSync() {
   if (!sbReady()) return;
-  var client = initSupabaseClient();
 
-  if (client) {
-    // Primary: Supabase Realtime WebSocket
-    try {
-      _realtimeCh = client
-        .channel('rg-sdm-changes')
-        .on('postgres_changes',
-            { event: '*', schema: 'public', table: 'rg_sdm_deliverables' },
-            handleRealtimeDeliverable)
-        .on('postgres_changes',
-            { event: '*', schema: 'public', table: 'rg_sdm_config' },
-            handleRealtimeConfig)
-        .subscribe(function(status) {
-          if (status === 'SUBSCRIBED') {
-            setOdStatus('synced', '● Live');
-            console.log('[RT] Realtime connected');
-            clearInterval(_bgPollTimer); // no need for polling if RT is live
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.warn('[RT] Realtime error, falling back to polling');
-            startFallbackPoll();
-          }
-        });
-    } catch(e) {
-      console.warn('[RT] Realtime init failed, using polling:', e);
-      startFallbackPoll();
-    }
-  } else {
-    startFallbackPoll();
+  // ── ALWAYS start the poll — it is the primary reliability mechanism ──
+  // Realtime is a bonus (faster), but the poll guarantees consistency
+  startFallbackPoll();
+
+  // ── Try Realtime on top of the poll ──
+  var client = initSupabaseClient();
+  if (!client) return;
+
+  try {
+    _realtimeCh = client
+      .channel('rg-sdm-changes')
+      .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'rg_sdm_deliverables' },
+          handleRealtimeDeliverable)
+      .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'rg_sdm_config' },
+          handleRealtimeConfig)
+      .subscribe(function(status) {
+        if (status === 'SUBSCRIBED') {
+          // Realtime is live — reduce poll interval but NEVER cancel it
+          // Poll remains as safety net in case RT events don't fire
+          clearInterval(_bgPollTimer);
+          _bgPollTimer = setInterval(pollOnce, 10000); // 10s safety poll
+          setOdStatus('synced', '● Live');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          // RT broken — ramp up the poll back to 5s
+          clearInterval(_bgPollTimer);
+          _bgPollTimer = setInterval(pollOnce, 5000);
+          setOdStatus('synced', 'Poll activo');
+        }
+      });
+  } catch(e) {
+    console.warn('[RT] init failed:', e.message);
+    // poll already running
   }
 }
 
-// Fallback polling (15s) if Realtime not available
+async function pollOnce() {
+  var result = await pullFromOneDrive();
+  if (!result) { setOdStatus('offline', 'Sem conexão'); return; }
+  migrateRecurring();
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
+  renderSidebar(); render();
+  var dirty = _dirtyItems.size + (_configDirty ? 1 : 0);
+  if (dirty > 0) {
+    pushToOneDrive();
+  } else {
+    setOdStatus('synced', 'Atualizado: ' + new Date().toLocaleTimeString('pt-BR'));
+  }
+}
+
+// Fallback polling — 5s for immediate team collaboration
 function startFallbackPoll() {
   clearInterval(_bgPollTimer);
-  _bgPollTimer = setInterval(async function() {
-    var result = await pullFromOneDrive();
-    if (result) {
-      migrateRecurring();
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
-      renderSidebar(); render();
-      var dirty = _dirtyItems.size + (_configDirty ? 1 : 0);
-      if (dirty > 0) pushToOneDrive();
-      else setOdStatus('synced', 'Poll: ' + new Date().toLocaleTimeString('pt-BR'));
-    } else {
-      setOdStatus('offline', 'Sem conexão');
-    }
-  }, 15000);
+  _bgPollTimer = setInterval(pollOnce, 5000);
 }
 
 // ── Indicador header ──
@@ -1452,7 +1465,7 @@ async function load() {
       setOdStatus("synced");
       startBgSync();
     }
-  }, 1200);
+  }, 400);  // fast initial pull for team collaboration
 }
 
 
