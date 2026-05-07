@@ -1385,15 +1385,25 @@ async function forceSyncNow() {
 // ────────────────────────────────────────────────
 // SAVE — mark specific items dirty, debounce push
 // ────────────────────────────────────────────────
-function save(changedDateKey) {
+function save(changedDateKey, changedItemId) {
   var cur = getCurrentUser();
   if (cur) { S._lastEditedBy = cur.name; S._lastEditedAt = new Date().toISOString(); }
 
-  // Mark dirty: specific day items OR config
-  if (changedDateKey && S.days && S.days[changedDateKey]) {
-    // Only mark items not already flagged as deleted
+  // Mark dirty: ONLY the specific changed item (never the whole day)
+  // This prevents one user's save from overwriting another user's items on the same day
+  if (changedDateKey && changedItemId) {
+    // Specific item changed — mark only that one
+    var _ci = (S.days[changedDateKey] && S.days[changedDateKey].deliverables||[])
+      .find(function(i){ return i.id === changedItemId; });
+    if (_ci && !(_dirtyItems.has(changedItemId) && _dirtyItems.get(changedItemId).deleted)) {
+      _dirtyItems.set(changedItemId, { dateKey: changedDateKey, item: _ci });
+    }
+  } else if (changedDateKey && S.days && S.days[changedDateKey]) {
+    // No specific ID — mark only items belonging to current user
+    var _cur = getCurrentUser && getCurrentUser();
     (S.days[changedDateKey].deliverables||[]).forEach(function(item) {
-      if (!(_dirtyItems.has(item.id) && _dirtyItems.get(item.id).deleted)) {
+      var isOwn = !_cur || item.memberId === _cur.memberId;
+      if (isOwn && !(_dirtyItems.has(item.id) && _dirtyItems.get(item.id).deleted)) {
         _dirtyItems.set(item.id, { dateKey: changedDateKey, item: item });
       }
     });
@@ -1453,10 +1463,16 @@ async function load() {
     migrateRecurring();
     // Rebuild dirty items that need actual item data from S
     _dirtyItems.forEach(function(v, k) {
-      if (v._needsRebuild && v.dateKey && S.days && S.days[v.dateKey]) {
+      if (!v._needsRebuild) return;
+      // CRITICAL: never remove deleted markers — keep them so push can DELETE from Supabase
+      if (v.deleted) {
+        _dirtyItems.set(k, { dateKey: v.dateKey, item: null, deleted: true });
+        return;
+      }
+      if (v.dateKey && S.days && S.days[v.dateKey]) {
         var item = (S.days[v.dateKey].deliverables||[]).find(function(d){ return d.id===k; });
         if (item) _dirtyItems.set(k, { dateKey: v.dateKey, item: item });
-        else _dirtyItems.delete(k); // item doesn't exist locally either
+        else _dirtyItems.delete(k);
       }
     });
   } catch(e) { S = defaultState(); }
@@ -1884,12 +1900,19 @@ function isApuracaoConcluida() {
 function genId() { return '_'+Math.random().toString(36).substr(2,9); }
 function ensureDay(s) { if(!S.days[s]) S.days[s]={deliverables:[],notes:''}; if(!S.days[s].deliverables) S.days[s].deliverables=[]; if(S.days[s].notes===undefined) S.days[s].notes=''; }
 
-function addDel(dateStr, data) { ensureDay(dateStr); S.days[dateStr].deliverables.push({id:genId(),createdAt:new Date().toISOString(),status:'pending',notes:'',blocker:false,...data}); save(dateStr); render(); }
-function updDel(dateStr, id, updates) { ensureDay(dateStr); const idx=S.days[dateStr].deliverables.findIndex(d=>d.id===id); if(idx!==-1){S.days[dateStr].deliverables[idx]={...S.days[dateStr].deliverables[idx],...updates}; save(dateStr); render(); updateLtBadge();} }
+function addDel(dateStr, data) {
+  ensureDay(dateStr);
+  var _ni = Object.assign({id:genId(),createdAt:new Date().toISOString(),status:'pending',notes:'',blocker:false}, data);
+  S.days[dateStr].deliverables.push(_ni);
+  _dirtyItems.set(_ni.id, { dateKey: dateStr, item: _ni });
+  save(dateStr, _ni.id);
+  render();
+}
+function updDel(dateStr, id, updates) { ensureDay(dateStr); const idx=S.days[dateStr].deliverables.findIndex(d=>d.id===id); if(idx!==-1){S.days[dateStr].deliverables[idx]={...S.days[dateStr].deliverables[idx],...updates}; save(dateStr, id); render(); updateLtBadge();} }
 function delDel(dateStr, id) {
   if(!S.days[dateStr]) return;
   // Mark deleted in Supabase before local removal
-  if(sbReady()) _dirtyItems.set(id,{dateKey:dateStr,item:null,deleted:true});
+  _dirtyItems.set(id, { dateKey: dateStr, item: null, deleted: true });
   S.days[dateStr].deliverables=S.days[dateStr].deliverables.filter(d=>d.id!==id);
   save(dateStr); render();
 }
@@ -6237,7 +6260,8 @@ function render(){
   if (_contentEl) {
     _contentEl.scrollTop  = _scrollTop;
     _contentEl.scrollLeft = _scrollLeft;
-  }}
+  }
+  if(_cel){_cel.scrollTop=_st;_cel.scrollLeft=_sl;}}
 
 // ═══════════════════════════════════════════════════
 // UTILS
