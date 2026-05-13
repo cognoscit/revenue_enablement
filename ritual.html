@@ -1288,8 +1288,7 @@ async function upsertDeliverable(itemId, dateKey, item) {
         id:         itemId,
         date_key:   dateKey,
         member_id:  item.memberId || null,
-        data:       item,
-        updated_at: item.updatedAt
+        data:       item
       })
     });
     if (!(r.ok || r.status === 201)) {
@@ -1326,7 +1325,7 @@ async function pushConfig() {
     var r = await fetch(sbBase() + "rg_sdm_config", {
       method:  "POST",
       headers: sbHdr({ "Prefer": "resolution=merge-duplicates,return=representation" }),
-      body:    JSON.stringify({ id: "config", data: extractConfig(), updated_at: new Date().toISOString() })
+      body:    JSON.stringify({ id: "config", data: extractConfig() })
     });
     if (!(r.ok || r.status === 201)) {
       syncTrace('push_config_failed', { status: r.status });
@@ -1478,9 +1477,7 @@ async function pullFromOneDrive() {
     // Non-admin: always apply remote config (they don't edit config locally)
     // Admin: apply if remote is newer OR if not locally dirty
     var adminUser = isAdminUser && isAdminUser();
-    var remTs     = new Date(cfgRow.updated_at||0).getTime();
-    var locTs     = new Date(S._lastEditedAt||0).getTime();
-    var applyConfig = !adminUser || !_configDirty || remTs > locTs;
+    var applyConfig = !adminUser || !_configDirty;
     if (applyConfig) {
       applyRemoteConfig(cfg);
     } else {
