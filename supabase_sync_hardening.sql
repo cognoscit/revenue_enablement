@@ -11,6 +11,7 @@ create extension if not exists pgcrypto;
 create or replace function public.rg_sdm_set_updated_at()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   new.updated_at = now();
@@ -21,6 +22,7 @@ $$;
 create or replace function public.rg_sdm_bump_version()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   new.version = coalesce(old.version, 0) + 1;
@@ -182,6 +184,8 @@ create index if not exists rg_sdm_sync_audit_row_idx
 create or replace function public.rg_sdm_audit_row()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 begin
   insert into public.rg_sdm_sync_audit(table_name, row_id, operation, old_row, new_row)
@@ -205,6 +209,18 @@ drop trigger if exists trg_rg_sdm_config_audit on public.rg_sdm_config;
 create trigger trg_rg_sdm_config_audit
 after insert or update or delete on public.rg_sdm_config
 for each row execute function public.rg_sdm_audit_row();
+
+revoke execute on function public.rg_sdm_audit_row() from public;
+revoke execute on function public.rg_sdm_audit_row() from anon;
+revoke execute on function public.rg_sdm_audit_row() from authenticated;
+
+do $$
+begin
+  if to_regprocedure('public.fn_audit_log()') is not null then
+    alter function public.fn_audit_log() set search_path = public;
+  end if;
+end;
+$$;
 
 -- Realtime prerequisite.
 do $$
