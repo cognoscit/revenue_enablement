@@ -1243,14 +1243,28 @@ function scheduleRetry() {
 // ────────────────────────────────────────────────
 
 async function pullAllDeliverables() {
+  // Paginate through all rows in batches of 1000
   try {
-    // Paginate: up to 3000 rows (plenty for ~1 year of data)
-    var r = await fetch(
-      sbBase() + "rg_sdm_deliverables?select=id,date_key,data,updated_at&order=date_key.desc&limit=3000",
-      { headers: sbHdr() }
-    );
-    if (!r.ok) return null;
-    return await r.json();
+    var allRows = [];
+    var page    = 0;
+    var pageSize = 1000;
+    while (true) {
+      var r = await fetch(
+        sbBase() + "rg_sdm_deliverables?select=id,date_key,data,updated_at"
+          + "&order=date_key.desc"
+          + "&limit=" + pageSize
+          + "&offset=" + (page * pageSize),
+        { headers: sbHdr({ "Prefer": "count=exact" }) }
+      );
+      if (!r.ok) break;
+      var batch = await r.json();
+      if (!batch || !batch.length) break;
+      allRows = allRows.concat(batch);
+      if (batch.length < pageSize) break; // last page
+      page++;
+      if (page > 50) break; // safety cap: max 50,000 rows
+    }
+    return allRows.length ? allRows : null;
   } catch(e) { return null; }
 }
 
