@@ -951,6 +951,8 @@ let _pushInFlight  = false;
 let _pushQueued    = false;
 let _lastPullChanged = false;
 let _lastPullHadError = false;
+let _syncAuthBlocked = false;
+let _syncAuthToastShown = false;
 let _syncSeq       = 0;
 const SYNC_FETCH_TIMEOUT_MS = 15000;
 
@@ -988,6 +990,21 @@ function compactSyncError(text) {
 function needsUpdatedAtCompatibility(status, text) {
   var msg = text || "";
   return status === 400 && /updated_at|null value|not-null|23502|default value|violates not-null/i.test(msg);
+}
+
+function isAuthOrPolicyDenied(status) {
+  return status === 401 || status === 403;
+}
+
+function handleSyncAuthBlocked(scope, status, text) {
+  _syncAuthBlocked = true;
+  var error = compactSyncError(text) || ("HTTP " + status);
+  syncTrace('sync_auth_blocked', { scope: scope, status: status, error: error });
+  setOdStatus("error", "Supabase recusou gravação (" + status + "): verifique anon key/RLS policies");
+  if (!_syncAuthToastShown) {
+    _syncAuthToastShown = true;
+    toast("⚠️ Supabase recusou gravação. Verifique as policies RLS/anon no SQL.", "yellow");
+  }
 }
 
 function syncTrace(event, detail) {
@@ -1248,7 +1265,7 @@ async function pollOnce() {
   }
 
   var dirty = _dirtyItems.size + (_configDirty ? 1 : 0);
-  if (dirty > 0) pushToOneDrive();
+  if (dirty > 0 && !_syncAuthBlocked) pushToOneDrive();
 }
 
 // Fallback polling — 5s for immediate team collaboration
@@ -1312,6 +1329,10 @@ async function upsertDeliverable(itemId, dateKey, item) {
     });
     if (!(r.ok || r.status === 201)) {
       var text = await responseTextSafe(r);
+      if (isAuthOrPolicyDenied(r.status)) {
+        handleSyncAuthBlocked('deliverable_upsert', r.status, text);
+        return false;
+      }
       if (needsUpdatedAtCompatibility(r.status, text)) {
         syncTrace('upsert_deliverable_compat_retry', { itemId: itemId, status: r.status, error: compactSyncError(text) });
         var compatBody = Object.assign({}, body, { updated_at: new Date().toISOString() });
@@ -1321,15 +1342,23 @@ async function upsertDeliverable(itemId, dateKey, item) {
           body:    JSON.stringify(compatBody)
         });
         if (r.ok || r.status === 201) {
+          _syncAuthBlocked = false;
+          _syncAuthToastShown = false;
           syncTrace('upsert_deliverable_ok', { itemId: itemId, dateKey: dateKey, compatibility: 'updated_at' });
           return true;
         }
         text = await responseTextSafe(r);
+        if (isAuthOrPolicyDenied(r.status)) {
+          handleSyncAuthBlocked('deliverable_upsert_compat', r.status, text);
+          return false;
+        }
       }
       syncTrace('upsert_deliverable_failed', { itemId: itemId, status: r.status, error: compactSyncError(text) });
       setOdStatus("error", "Falha ao salvar item: " + compactSyncError(text));
       return false;
     }
+    _syncAuthBlocked = false;
+    _syncAuthToastShown = false;
     syncTrace('upsert_deliverable_ok', { itemId: itemId, dateKey: dateKey });
     return true;
   } catch(e) {
@@ -1346,8 +1375,15 @@ async function deleteDeliverable(itemId) {
       method:  "DELETE",
       headers: sbHdr()
     });
-    if (!r.ok) syncTrace('delete_deliverable_failed', { itemId: itemId, status: r.status, error: compactSyncError(await responseTextSafe(r)) });
-    else syncTrace('delete_deliverable_ok', { itemId: itemId });
+    if (!r.ok) {
+      var text = await responseTextSafe(r);
+      if (isAuthOrPolicyDenied(r.status)) handleSyncAuthBlocked('deliverable_delete', r.status, text);
+      syncTrace('delete_deliverable_failed', { itemId: itemId, status: r.status, error: compactSyncError(text) });
+    } else {
+      _syncAuthBlocked = false;
+      _syncAuthToastShown = false;
+      syncTrace('delete_deliverable_ok', { itemId: itemId });
+    }
     return r.ok;
   } catch(e) {
     syncTrace('delete_deliverable_error', { itemId: itemId, message: e.message });
@@ -1367,6 +1403,10 @@ async function pushConfig() {
     });
     if (!(r.ok || r.status === 201)) {
       var text = await responseTextSafe(r);
+      if (isAuthOrPolicyDenied(r.status)) {
+        handleSyncAuthBlocked('config_upsert', r.status, text);
+        return false;
+      }
       if (needsUpdatedAtCompatibility(r.status, text)) {
         syncTrace('push_config_compat_retry', { status: r.status, error: compactSyncError(text) });
         var compatBody = Object.assign({}, body, { updated_at: new Date().toISOString() });
@@ -1376,15 +1416,23 @@ async function pushConfig() {
           body:    JSON.stringify(compatBody)
         });
         if (r.ok || r.status === 201) {
+          _syncAuthBlocked = false;
+          _syncAuthToastShown = false;
           syncTrace('push_config_ok', { compatibility: 'updated_at' });
           return true;
         }
         text = await responseTextSafe(r);
+        if (isAuthOrPolicyDenied(r.status)) {
+          handleSyncAuthBlocked('config_upsert_compat', r.status, text);
+          return false;
+        }
       }
       syncTrace('push_config_failed', { status: r.status, error: compactSyncError(text) });
       setOdStatus("error", "Falha ao salvar configurações: " + compactSyncError(text));
       return false;
     }
+    _syncAuthBlocked = false;
+    _syncAuthToastShown = false;
     syncTrace('push_config_ok');
     return true;
   } catch(e) {
@@ -1397,6 +1445,11 @@ async function pushConfig() {
 // Main push — flush dirty items + config
 async function pushToOneDrive() {
   if (!sbReady()) { setOdStatus("disconnected"); return false; }
+  if (_syncAuthBlocked) {
+    persistDirtyQueue();
+    setOdStatus("error", "Sync pausado: Supabase recusou gravação (401/403)");
+    return false;
+  }
   if (_pushInFlight) { _pushQueued = true; return false; }
   _pushInFlight = true;
   try {
@@ -1429,13 +1482,13 @@ async function pushToOneDrive() {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
       persistDirtyQueue();
     } else {
-      setOdStatus("offline", "Retry em 30s (" + failed.length + " falha(s))");
+      setOdStatus(_syncAuthBlocked ? "error" : "offline", _syncAuthBlocked ? "Permissão Supabase bloqueada" : "Retry em 30s (" + failed.length + " falha(s))");
       failed.forEach(function(f) {
         if (f.type === "config") _configDirty = true;
         else _dirtyItems.set(f.id, f.payload);
       });
       persistDirtyQueue();
-      scheduleRetry();
+      if (!_syncAuthBlocked) scheduleRetry();
     }
     return allOk;
   } finally {
@@ -1446,6 +1499,7 @@ async function pushToOneDrive() {
 
 function scheduleRetry() {
   clearTimeout(_retryTimer);
+  if (_syncAuthBlocked) return;
   _retryTimer = setTimeout(pushToOneDrive, 30000);
 }
 
@@ -1649,8 +1703,8 @@ async function firstTimePush() {
     toast("✅ Dados enviados ao Supabase", "green");
   } else {
     persistDirtyQueue();
-    setOdStatus("offline", "Falha no envio inicial; retry em 30s");
-    scheduleRetry();
+    setOdStatus(_syncAuthBlocked ? "error" : "offline", _syncAuthBlocked ? "Permissão Supabase bloqueada" : "Falha no envio inicial; retry em 30s");
+    if (!_syncAuthBlocked) scheduleRetry();
     toast("⚠️ Supabase não confirmou todos os dados. A fila local foi preservada.", "yellow");
   }
   return allOk;
@@ -1659,6 +1713,8 @@ async function firstTimePush() {
 function odLogout() { setOdStatus("disconnected"); }
 
 async function forceSyncNow() {
+  _syncAuthBlocked = false;
+  _syncAuthToastShown = false;
   setOdStatus("syncing", "Sincronizando...");
   var result = await pullFromOneDrive();
   if (result) {
@@ -1875,7 +1931,7 @@ function migrateRecurring() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
     syncTrace('recurring_migration_dirty', { sources: S.recurring.length, items: changedItems });
     console.log('[RG] Migração: ' + S.recurring.length + ' fonte(s) recorrente(s) ativas.');
-    if (sbReady()) pushToOneDrive();
+    if (sbReady() && !_syncAuthBlocked) pushToOneDrive();
   }
 }
 

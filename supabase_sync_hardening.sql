@@ -11,6 +11,7 @@ create extension if not exists pgcrypto;
 create or replace function public.rg_sdm_set_updated_at()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   new.updated_at = now();
@@ -21,6 +22,7 @@ $$;
 create or replace function public.rg_sdm_bump_version()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   new.version = coalesce(old.version, 0) + 1;
@@ -68,6 +70,64 @@ alter table public.rg_sdm_config
   alter column updated_at set not null,
   alter column version set default 1,
   alter column version set not null;
+
+-- Static HTML uses the public anon key. If RLS is enabled without these
+-- policies, reads may work while upserts fail with HTTP 401.
+alter table public.rg_sdm_deliverables enable row level security;
+alter table public.rg_sdm_config enable row level security;
+
+grant select, insert, update, delete on public.rg_sdm_deliverables to anon, authenticated;
+grant select, insert, update, delete on public.rg_sdm_config to anon, authenticated;
+
+drop policy if exists rg_sdm_deliverables_select on public.rg_sdm_deliverables;
+create policy rg_sdm_deliverables_select
+on public.rg_sdm_deliverables
+for select to anon, authenticated
+using (true);
+
+drop policy if exists rg_sdm_deliverables_insert on public.rg_sdm_deliverables;
+create policy rg_sdm_deliverables_insert
+on public.rg_sdm_deliverables
+for insert to anon, authenticated
+with check (true);
+
+drop policy if exists rg_sdm_deliverables_update on public.rg_sdm_deliverables;
+create policy rg_sdm_deliverables_update
+on public.rg_sdm_deliverables
+for update to anon, authenticated
+using (true)
+with check (true);
+
+drop policy if exists rg_sdm_deliverables_delete on public.rg_sdm_deliverables;
+create policy rg_sdm_deliverables_delete
+on public.rg_sdm_deliverables
+for delete to anon, authenticated
+using (true);
+
+drop policy if exists rg_sdm_config_select on public.rg_sdm_config;
+create policy rg_sdm_config_select
+on public.rg_sdm_config
+for select to anon, authenticated
+using (true);
+
+drop policy if exists rg_sdm_config_insert on public.rg_sdm_config;
+create policy rg_sdm_config_insert
+on public.rg_sdm_config
+for insert to anon, authenticated
+with check (true);
+
+drop policy if exists rg_sdm_config_update on public.rg_sdm_config;
+create policy rg_sdm_config_update
+on public.rg_sdm_config
+for update to anon, authenticated
+using (true)
+with check (true);
+
+drop policy if exists rg_sdm_config_delete on public.rg_sdm_config;
+create policy rg_sdm_config_delete
+on public.rg_sdm_config
+for delete to anon, authenticated
+using (true);
 
 create unique index if not exists rg_sdm_deliverables_id_uidx
   on public.rg_sdm_deliverables (id);
@@ -124,6 +184,8 @@ create index if not exists rg_sdm_sync_audit_row_idx
 create or replace function public.rg_sdm_audit_row()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 begin
   insert into public.rg_sdm_sync_audit(table_name, row_id, operation, old_row, new_row)
@@ -147,6 +209,18 @@ drop trigger if exists trg_rg_sdm_config_audit on public.rg_sdm_config;
 create trigger trg_rg_sdm_config_audit
 after insert or update or delete on public.rg_sdm_config
 for each row execute function public.rg_sdm_audit_row();
+
+revoke execute on function public.rg_sdm_audit_row() from public;
+revoke execute on function public.rg_sdm_audit_row() from anon;
+revoke execute on function public.rg_sdm_audit_row() from authenticated;
+
+do $$
+begin
+  if to_regprocedure('public.fn_audit_log()') is not null then
+    alter function public.fn_audit_log() set search_path = public;
+  end if;
+end;
+$$;
 
 -- Realtime prerequisite.
 do $$
