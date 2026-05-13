@@ -939,7 +939,7 @@ function loadSeedIfNeeded() {
 const SB_URL     = "https://dlsumchrteigmuumpeke.supabase.co";   // ex: "https://xyzxyz.supabase.co"
 const SB_KEY     = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsc3VtY2hydGVpZ211dW1wZWtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNDE3MjgsImV4cCI6MjA5MjYxNzcyOH0.1JCPBodkrVjbH3dYz9kbWjfKil8suhYNb4R2L3fxRFM";   // anon public key (eyJ...)
 const SB_ROW_ID  = "main";
-const SB_TABLE   = "rg_sdm_state";
+const SB_TABLE   = "rg_sdm_deliverables"; // legacy alias — not used directly
 
 let _syncTimer     = null;
 let _retryTimer    = null;
@@ -1269,7 +1269,9 @@ function reconstructDays(rows) {
   rows.forEach(function(row) {
     var dk = row.date_key;
     if (!days[dk]) days[dk] = { deliverables: [], notes: "" };
-    // Only add if this item isn't locally dirty (local wins for dirty items)
+    // Skip deleted items and dirty items (local wins)
+    var _rd = _dirtyItems.get(row.id);
+    if (_rd && _rd.deleted) return;  // was deleted locally — don't restore
     if (!_dirtyItems.has(row.id)) {
       // Replace or add
       var existing = days[dk].deliverables.findIndex(function(d){ return d.id === row.id; });
@@ -3526,7 +3528,7 @@ function renderSettings() {
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div class="fg" style="min-width:200px">
           <label class="flbl">Semana aberta para avaliação</label>
-          <select class="fsel" onchange="S._lastWorkdayWeek=this.value;save();updateAvalBadge();renderSettings()">
+          <select class="fsel" onchange="S._lastWorkdayWeek=this.value;S.lastWorkdayMode=!!S._lastWorkdayWeek;_configDirty=true;save();updateAvalBadge();renderSettings()">
             ${(function(){
               // Show last 8 weeks + next 2 as options
               var opts=''; var today_=today();
@@ -3579,9 +3581,9 @@ function renderSettings() {
   document.getElementById('content').innerHTML=html;
 }
 
-function addCat(){const i=document.getElementById('new-cat');const v=i.value.trim();if(v&&!S.settings.categories.includes(v)){S.settings.categories.push(v);save();renderSettings();}i.value='';}
-function removeCat(c){S.settings.categories=S.settings.categories.filter(x=>x!==c);save();renderSettings();}
-function confirmReset(){openModal({title:'⚠️ Resetar Dados',body:`<div style="text-align:center;padding:20px"><div style="font-size:44px;margin-bottom:12px">⚠️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px">Apagar todos os dados?</div><div style="color:var(--text-muted)">Esta ação não pode ser desfeita.</div></div>`,foot:`<button class="btn btn-s" onclick="closeModal()">Cancelar</button><button class="btn btn-d" onclick="S=defaultState();save();closeModal();render();toast('✅ Dados resetados','yellow')">Confirmar Reset</button>`});}
+function addCat(){const i=document.getElementById('new-cat');const v=i.value.trim();if(v&&!S.settings.categories.includes(v)){S.settings.categories.push(v);_configDirty=true; save();renderSettings();}i.value='';}
+function removeCat(c){S.settings.categories=S.settings.categories.filter(x=>x!==c);_configDirty=true; save();renderSettings();}
+function confirmReset(){openModal({title:'⚠️ Resetar Dados',body:`<div style="text-align:center;padding:20px"><div style="font-size:44px;margin-bottom:12px">⚠️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px">Apagar todos os dados?</div><div style="color:var(--text-muted)">Esta ação não pode ser desfeita.</div></div>`,foot:`<button class="btn btn-s" onclick="closeModal()">Cancelar</button><button class="btn btn-d" onclick="S=defaultState();_configDirty=true; save();closeModal();render();toast('✅ Dados resetados','yellow')">Confirmar Reset</button>`});}
 
 // ═══════════════════════════════════════════════════
 // MODALS
@@ -4273,7 +4275,7 @@ function submitDel(dateStr,editId){
         const existing=S.recurring.find(r=>r.id===editId);
         if(existing){
           Object.assign(existing,{description:desc,memberId,deadline,priority,category,notes,blocker,type,recurrence,active:true});
-          save(); render(); closeModal(); toast('✅ Recorrência atualizada','green'); return;
+          _configDirty=true; save(); render(); closeModal(); toast('✅ Recorrência atualizada','green'); return;
         }
       }
       const src={id:genId(),description:desc,memberId,deadline,priority,category,notes,blocker,type,recurrence,active:true,createdAt:new Date().toISOString()};
@@ -6027,7 +6029,9 @@ function appendActivityLog(entry) {
   if (!S.activityLog) S.activityLog = [];
   S.activityLog.push(Object.assign({ ts: new Date().toISOString() }, entry));
   if (S.activityLog.length > 500) S.activityLog = S.activityLog.slice(-500);
-  save();
+  // Don't save() here — activity log is included in next config push automatically
+  // Saving on every log entry floods Supabase with unnecessary writes
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
 }
 
 // Update header chip showing current user
