@@ -1254,7 +1254,7 @@ async function pullAllDeliverables() {
           + "&order=date_key.desc"
           + "&limit=" + pageSize
           + "&offset=" + (page * pageSize),
-        { headers: sbHdr({ "Prefer": "count=exact" }) }
+        { headers: sbHdr() }
       );
       if (!r.ok) break;
       var batch = await r.json();
@@ -1328,18 +1328,42 @@ async function pullFromOneDrive() {
   // Apply deliverables — merge remote into S.days, local dirty items win
   if (rows && rows.length) {
     var remoteDays = reconstructDays(rows);
+    // Build set of all remote IDs per day for fast lookup
+    var remoteIdsByDay = {};
+    Object.entries(remoteDays).forEach(function(e) {
+      remoteIdsByDay[e[0]] = new Set(e[1].deliverables.map(function(d){ return d.id; }));
+    });
     if (!S.days) S.days = {};
     Object.entries(remoteDays).forEach(function(e) {
       var dk = e[0], dayData = e[1];
       if (!S.days[dk]) {
         S.days[dk] = dayData;
       } else {
-        // Merge: add/update items that aren't locally dirty
+        // ADD / UPDATE items from remote that aren't locally dirty
         dayData.deliverables.forEach(function(remItem) {
-          if (_dirtyItems.has(remItem.id)) return;  // local pending write wins
+          if (_dirtyItems.has(remItem.id)) return;
           var idx = S.days[dk].deliverables.findIndex(function(d){ return d.id === remItem.id; });
           if (idx !== -1) S.days[dk].deliverables[idx] = remItem;
           else            S.days[dk].deliverables.push(remItem);
+        });
+        // REMOVE items that no longer exist in Supabase and aren't locally dirty
+        S.days[dk].deliverables = S.days[dk].deliverables.filter(function(localItem) {
+          // Keep if locally dirty (pending push or pending delete)
+          if (_dirtyItems.has(localItem.id)) return true;
+          // Keep if it exists in remote
+          if (remoteIdsByDay[dk] && remoteIdsByDay[dk].has(localItem.id)) return true;
+          // Remove — it was deleted by another user
+          return false;
+        });
+      }
+    });
+    // Also handle days that exist locally but have NO rows in remote
+    // (all items of that day were deleted by other users)
+    Object.keys(S.days).forEach(function(dk) {
+      if (!remoteDays[dk]) {
+        // Day not in remote at all — remove items that aren't locally dirty
+        S.days[dk].deliverables = (S.days[dk].deliverables||[]).filter(function(item) {
+          return _dirtyItems.has(item.id);
         });
       }
     });
@@ -6274,12 +6298,8 @@ function render(){
     case 'settings': renderSettings(); break;
   }
 
-  // Restore scroll position after re-render
-  if (_contentEl) {
-    _contentEl.scrollTop  = _scrollTop;
-    _contentEl.scrollLeft = _scrollLeft;
-  }
-  if(_cel){_cel.scrollTop=_st;_cel.scrollLeft=_sl;}}
+  if(_contentEl){_contentEl.scrollTop=_scrollTop;_contentEl.scrollLeft=_scrollLeft;}
+}
 
 // ═══════════════════════════════════════════════════
 // UTILS
