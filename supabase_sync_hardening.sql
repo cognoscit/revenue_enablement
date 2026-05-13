@@ -118,9 +118,22 @@ create trigger trg_rg_sdm_config_audit
 after insert or update or delete on public.rg_sdm_config
 for each row execute function public.rg_sdm_audit_row();
 
--- Realtime prerequisite. If these commands fail with "already member", ignore.
-alter publication supabase_realtime add table public.rg_sdm_deliverables;
-alter publication supabase_realtime add table public.rg_sdm_config;
+-- Realtime prerequisite.
+do $$
+begin
+  alter publication supabase_realtime add table public.rg_sdm_deliverables;
+exception
+  when duplicate_object then null;
+end;
+$$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.rg_sdm_config;
+exception
+  when duplicate_object then null;
+end;
+$$;
 
 -- Diagnostics: duplicates by primary id. Should return zero rows.
 select id, count(*) as rows_per_id
