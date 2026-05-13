@@ -953,6 +953,9 @@ let _lastPullChanged = false;
 let _lastPullHadError = false;
 let _syncAuthBlocked = false;
 let _syncAuthToastShown = false;
+let _remoteHydrated = false;
+let _pendingRecurringSourceIds = new Set();
+let _deletedRecurringSourceIds = new Set();
 let _syncSeq       = 0;
 const SYNC_FETCH_TIMEOUT_MS = 15000;
 
@@ -1026,9 +1029,14 @@ function syncTrace(event, detail) {
 
 function persistDirtyQueue() {
   try {
-    var dq = { config: _configDirty, items: [] };
+    var dq = {
+      config: _configDirty,
+      items: [],
+      pendingRecurring: Array.from(_pendingRecurringSourceIds),
+      deletedRecurring: Array.from(_deletedRecurringSourceIds)
+    };
     _dirtyItems.forEach(function(v,k){ dq.items.push({ id:k, dateKey:v.dateKey, deleted:!!v.deleted }); });
-    if (!_configDirty && dq.items.length === 0) localStorage.removeItem("rg_dirty_queue");
+    if (!_configDirty && dq.items.length === 0 && dq.pendingRecurring.length === 0 && dq.deletedRecurring.length === 0) localStorage.removeItem("rg_dirty_queue");
     else localStorage.setItem("rg_dirty_queue", JSON.stringify(dq));
   } catch(e) {}
 }
@@ -1106,6 +1114,14 @@ function applyDayNotes(dayNotes) {
 
 function applyRemoteConfig(cfg) {
   if (!cfg) return;
+  if (configMissingPendingRecurring(cfg)) {
+    _configDirty = true;
+    persistDirtyQueue();
+    scheduleRetry();
+    return;
+  }
+  clearConfirmedRecurringSources(cfg);
+  clearConfirmedDeletedRecurringSources(cfg);
   if (cfg.team)            S.team            = cfg.team;
   if (cfg.pillars)         S.pillars         = cfg.pillars;
   if (cfg.recurring)       S.recurring       = cfg.recurring;
@@ -1312,6 +1328,62 @@ function extractConfig() {
   };
 }
 
+function rememberPendingRecurringSource(id) {
+  if (id) _pendingRecurringSourceIds.add(id);
+}
+
+function recurringIdsFromConfig(cfg) {
+  return new Set(((cfg && cfg.recurring) || []).map(function(r){ return r && r.id; }).filter(Boolean));
+}
+
+function configMissingPendingRecurring(cfg) {
+  if (!_pendingRecurringSourceIds.size) return false;
+  var ids = recurringIdsFromConfig(cfg);
+  var missing = [];
+  _pendingRecurringSourceIds.forEach(function(id){ if (!ids.has(id)) missing.push(id); });
+  if (missing.length) {
+    syncTrace('config_missing_pending_recurring', { ids: missing });
+    return true;
+  }
+  return false;
+}
+
+function clearConfirmedRecurringSources(cfg) {
+  if (!_pendingRecurringSourceIds.size) return;
+  var ids = recurringIdsFromConfig(cfg);
+  _pendingRecurringSourceIds.forEach(function(id){
+    if (ids.has(id)) _pendingRecurringSourceIds.delete(id);
+  });
+  persistDirtyQueue();
+}
+
+function clearConfirmedDeletedRecurringSources(cfg) {
+  if (!_deletedRecurringSourceIds.size) return;
+  var ids = recurringIdsFromConfig(cfg);
+  _deletedRecurringSourceIds.forEach(function(id){
+    if (!ids.has(id)) _deletedRecurringSourceIds.delete(id);
+  });
+  persistDirtyQueue();
+}
+
+function mergeRecurringForPush(remoteRecurring, localRecurring) {
+  var merged = new Map();
+  (remoteRecurring || []).forEach(function(src){
+    if (src && src.id && !_deletedRecurringSourceIds.has(src.id)) merged.set(src.id, src);
+  });
+  (localRecurring || []).forEach(function(src){
+    if (src && src.id && !_deletedRecurringSourceIds.has(src.id)) merged.set(src.id, src);
+  });
+  return Array.from(merged.values());
+}
+
+function mergeConfigForPush(remoteCfg, localCfg) {
+  if (!remoteCfg) return localCfg;
+  var merged = Object.assign({}, remoteCfg, localCfg);
+  merged.recurring = mergeRecurringForPush(remoteCfg.recurring, localCfg.recurring);
+  return merged;
+}
+
 // Upsert a single deliverable row
 async function upsertDeliverable(itemId, dateKey, item) {
   try {
@@ -1395,7 +1467,16 @@ async function deleteDeliverable(itemId) {
 // Upsert config
 async function pushConfig() {
   try {
-    var body = { id: "config", data: extractConfig() };
+    var localCfg = extractConfig();
+    _lastPullHadError = false;
+    var remoteRow = await pullConfig();
+    if (_lastPullHadError && !remoteRow) {
+      syncTrace('push_config_merge_read_failed');
+      setOdStatus("offline", "Falha ao confirmar config remota antes de salvar");
+      return false;
+    }
+    var mergedCfg = mergeConfigForPush(remoteRow && remoteRow.data, localCfg);
+    var body = { id: "config", data: mergedCfg };
     var r = await fetchWithTimeout(sbBase() + "rg_sdm_config", {
       method:  "POST",
       headers: sbHdr({ "Prefer": "resolution=merge-duplicates,return=representation" }),
@@ -1416,6 +1497,11 @@ async function pushConfig() {
           body:    JSON.stringify(compatBody)
         });
         if (r.ok || r.status === 201) {
+          var compatRows = await r.clone().json().catch(function(){ return null; });
+          var compatCfg = compatRows && compatRows[0] && compatRows[0].data;
+          if (configMissingPendingRecurring(compatCfg || mergedCfg)) return false;
+          clearConfirmedRecurringSources(compatCfg || mergedCfg);
+          clearConfirmedDeletedRecurringSources(compatCfg || mergedCfg);
           _syncAuthBlocked = false;
           _syncAuthToastShown = false;
           syncTrace('push_config_ok', { compatibility: 'updated_at' });
@@ -1431,6 +1517,11 @@ async function pushConfig() {
       setOdStatus("error", "Falha ao salvar configurações: " + compactSyncError(text));
       return false;
     }
+    var rows = await r.clone().json().catch(function(){ return null; });
+    var cfg = rows && rows[0] && rows[0].data;
+    if (configMissingPendingRecurring(cfg || mergedCfg)) return false;
+    clearConfirmedRecurringSources(cfg || mergedCfg);
+    clearConfirmedDeletedRecurringSources(cfg || mergedCfg);
     _syncAuthBlocked = false;
     _syncAuthToastShown = false;
     syncTrace('push_config_ok');
@@ -1651,6 +1742,7 @@ async function pullFromOneDrive() {
       rows: rows ? rows.length : null,
       config: !!cfgRow
     });
+    _remoteHydrated = true;
     return S;
   } finally {
     _pullInFlight = false;
@@ -1810,6 +1902,8 @@ async function load() {
           _dirtyItems.set(entry.id, { dateKey: entry.dateKey, _needsRebuild: true, deleted: !!entry.deleted });
         }
       });
+      (dq.pendingRecurring||[]).forEach(function(id){ if (id) _pendingRecurringSourceIds.add(id); });
+      (dq.deletedRecurring||[]).forEach(function(id){ if (id) _deletedRecurringSourceIds.add(id); });
     }
   } catch(e) {}
 
@@ -1827,7 +1921,7 @@ async function load() {
     if (S._lastWorkdayWeek === undefined) S._lastWorkdayWeek = null;
     if (!sbReady()) loadSeedIfNeeded();
     setTimeout(checkIdentityOnLoad, 700);
-    migrateRecurring();
+    if (!sbReady()) migrateRecurring();
     // Rebuild dirty items that need actual item data from S
     _dirtyItems.forEach(function(v, k) {
       if (!v._needsRebuild) return;
@@ -1876,6 +1970,10 @@ async function load() {
    à sua fonte via recurringSourceId.
 ───────────────────────────────────────────────────────────────── */
 function migrateRecurring() {
+  if (sbReady() && !_remoteHydrated) {
+    syncTrace('recurring_migration_deferred', { reason: 'remote_not_hydrated' });
+    return;
+  }
   if (!S.recurring) S.recurring = [];
   let changed = false;
   let changedItems = 0;
@@ -1911,6 +2009,7 @@ function migrateRecurring() {
           createdAt:   item.createdAt   || new Date().toISOString(),
         };
         S.recurring.push(src);
+        rememberPendingRecurringSource(src.id);
         srcMap[k] = src.id;
         changed = true;
       }
@@ -4658,6 +4757,7 @@ function submitDel(dateStr,editId){
       }
       const src={id:genId(),description:desc,memberId,deadline,priority,category,notes,blocker,type,recurrence,active:true,createdAt:new Date().toISOString()};
       S.recurring.push(src);
+      rememberPendingRecurringSource(src.id);
       save(); render(); closeModal();
       const fLabel=FREQ_LABELS[freq]?.lbl||freq;
       toast('🔁 Recorrência '+fLabel+' criada','purple');
@@ -4800,6 +4900,8 @@ function skipThisOccurrence(dateStr, itemId, srcId) {
   toast('🗑 Ocorrência removida para este dia','yellow');
 }
 function removeRecurringSource(srcId){
+  _deletedRecurringSourceIds.add(srcId);
+  _pendingRecurringSourceIds.delete(srcId);
   S.recurring=(S.recurring||[]).filter(r=>r.id!==srcId);
   // Mark all materialized instances as deleted in Supabase BEFORE removing locally
   Object.entries(S.days||{}).forEach(function(e){
