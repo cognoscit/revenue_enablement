@@ -946,6 +946,10 @@ let _retryTimer    = null;
 let _dirtyItems    = new Map();  // itemId → { dateKey, item }
 let _configDirty   = false;
 let _lastSyncedAt  = null;
+let _pullInFlight  = false;
+let _pushInFlight  = false;
+let _pushQueued    = false;
+let _remoteMeta    = new Map(); // itemId -> updated_at ms
 
 function sbReady() { return !!(SB_URL && SB_KEY); }
 function sbBase()  { return SB_URL.replace(/\/+$/, "") + "/rest/v1/"; }
@@ -984,6 +988,11 @@ async function handleRealtimeDeliverable(payload) {
 
   if (_dirtyItems.has(itemId)) return; // local pending write wins
 
+  var rowTs = new Date(row.updated_at||0).getTime();
+  var knownTs = _remoteMeta.get(itemId) || 0;
+  if (rowTs && rowTs < knownTs) return; // stale event
+  if (rowTs) _remoteMeta.set(itemId, rowTs);
+
   if (ev === 'DELETE') {
     if (S.days && S.days[dateKey]) {
       S.days[dateKey].deliverables = (S.days[dateKey].deliverables||[]).filter(function(d){ return d.id !== itemId; });
@@ -1013,7 +1022,13 @@ async function handleRealtimeDeliverable(payload) {
 
 async function handleRealtimeConfig(payload) {
   // Called when rg_sdm_config changes — pull full config
-  var cfg = payload.new && payload.new.data;
+  var cfg = payload && payload.new && payload.new.data;
+  if (!cfg) {
+    try {
+      var cfgRow = await pullConfig();
+      cfg = cfgRow && cfgRow.data;
+    } catch(e) {}
+  }
   if (!cfg) return;
   if (!isAdminUser || !isAdminUser()) {
     // Non-admin: always apply
@@ -1081,6 +1096,8 @@ function startBgSync() {
 }
 
 async function pollOnce() {
+  if (_pullInFlight) return;
+
   // Snapshot of current state before pull to detect real changes
   var beforeTs  = S._lastEditedAt || '';
   var beforeSize = Object.values(S.days||{}).reduce(function(n,d){return n+(d.deliverables||[]).length;},0);
@@ -1193,44 +1210,48 @@ async function pushConfig() {
 // Main push — flush dirty items + config
 async function pushToOneDrive() {
   if (!sbReady()) { setOdStatus("disconnected"); return false; }
-  setOdStatus("syncing");
-  var allOk = true;
-  var failed = [];
+  if (_pushInFlight) { _pushQueued = true; return false; }
+  _pushInFlight = true;
+  try {
+    setOdStatus("syncing");
+    var allOk = true;
+    var failed = [];
 
-  // Flush dirty deliverables
-  var entries = Array.from(_dirtyItems.entries());
-  for (var i = 0; i < entries.length; i++) {
-    var id_ = entries[i][0], payload = entries[i][1];
-    var ok = payload.deleted
-      ? await deleteDeliverable(id_)
-      : await upsertDeliverable(id_, payload.dateKey, payload.item);
-    if (ok) { _dirtyItems.delete(id_); }
-    else    { failed.push({ id: id_, payload }); allOk = false; }
-  }
+    // Flush dirty deliverables
+    var entries = Array.from(_dirtyItems.entries());
+    for (var i = 0; i < entries.length; i++) {
+      var id_ = entries[i][0], payload = entries[i][1];
+      var ok = payload.deleted
+        ? await deleteDeliverable(id_)
+        : await upsertDeliverable(id_, payload.dateKey, payload.item);
+      if (ok) { _dirtyItems.delete(id_); }
+      else    { failed.push({ id: id_, payload }); allOk = false; }
+    }
 
-  // Push config
-  if (_configDirty) {
-    var ok2 = await pushConfig();
-    if (ok2) { _configDirty = false; }
-    else     { failed.push({ type: "config" }); allOk = false; }
-  }
+    // Push config
+    if (_configDirty) {
+      var ok2 = await pushConfig();
+      if (ok2) { _configDirty = false; }
+      else     { failed.push({ type: "config" }); allOk = false; }
+    }
 
-  if (allOk) {
-    _lastSyncedAt = new Date();
-    var pendingCount = _dirtyItems.size + (_configDirty ? 1 : 0);
-    setOdStatus("synced", "Enviado: " + _lastSyncedAt.toLocaleTimeString("pt-BR"));
-    // Clear persisted dirty queue — all confirmed
-    try { localStorage.removeItem("rg_dirty_queue"); } catch(e) {}
-  } else {
-    setOdStatus("offline", "Retry em 30s (" + failed.length + " falha(s))");
-    // Re-queue failures
-    failed.forEach(function(f) {
-      if (f.type === "config") _configDirty = true;
-      else _dirtyItems.set(f.id, f.payload);
-    });
-    scheduleRetry();
+    if (allOk) {
+      _lastSyncedAt = new Date();
+      setOdStatus("synced", "Enviado: " + _lastSyncedAt.toLocaleTimeString("pt-BR"));
+      try { localStorage.removeItem("rg_dirty_queue"); } catch(e) {}
+    } else {
+      setOdStatus("offline", "Retry em 30s (" + failed.length + " falha(s))");
+      failed.forEach(function(f) {
+        if (f.type === "config") _configDirty = true;
+        else _dirtyItems.set(f.id, f.payload);
+      });
+      scheduleRetry();
+    }
+    return allOk;
+  } finally {
+    _pushInFlight = false;
+    if (_pushQueued) { _pushQueued = false; setTimeout(pushToOneDrive, 50); }
   }
-  return allOk;
 }
 
 function scheduleRetry() {
@@ -1298,8 +1319,11 @@ function reconstructDays(rows) {
 
 async function pullFromOneDrive() {
   if (!sbReady()) return null;
-  var [rows, cfgRow] = await Promise.all([pullAllDeliverables(), pullConfig()]);
-  if (!rows && !cfgRow) return null;
+  if (_pullInFlight) return S;
+  _pullInFlight = true;
+  try {
+    var [rows, cfgRow] = await Promise.all([pullAllDeliverables(), pullConfig()]);
+    if (!rows && !cfgRow) return null;
 
   // Apply config (only if not locally dirty)
   if (cfgRow && cfgRow.data) {
@@ -1327,6 +1351,7 @@ async function pullFromOneDrive() {
 
   // Apply deliverables — merge remote into S.days, local dirty items win
   if (rows && rows.length) {
+    rows.forEach(function(r){ var ts=new Date(r.updated_at||0).getTime(); if(ts) _remoteMeta.set(r.id, Math.max(_remoteMeta.get(r.id)||0, ts)); });
     var remoteDays = reconstructDays(rows);
     // Build set of all remote IDs per day for fast lookup
     var remoteIdsByDay = {};
@@ -1343,8 +1368,13 @@ async function pullFromOneDrive() {
         dayData.deliverables.forEach(function(remItem) {
           if (_dirtyItems.has(remItem.id)) return;
           var idx = S.days[dk].deliverables.findIndex(function(d){ return d.id === remItem.id; });
-          if (idx !== -1) S.days[dk].deliverables[idx] = remItem;
-          else            S.days[dk].deliverables.push(remItem);
+          if (idx !== -1) {
+            var localTs = new Date(S.days[dk].deliverables[idx].updatedAt||S.days[dk].deliverables[idx].createdAt||0).getTime();
+            var remoteTs = _remoteMeta.get(remItem.id) || 0;
+            if (!localTs || remoteTs >= localTs) S.days[dk].deliverables[idx] = remItem;
+          } else {
+            S.days[dk].deliverables.push(remItem);
+          }
         });
         // REMOVE items that no longer exist in Supabase and aren't locally dirty
         S.days[dk].deliverables = S.days[dk].deliverables.filter(function(localItem) {
@@ -1369,7 +1399,10 @@ async function pullFromOneDrive() {
     });
   }
 
-  return S;
+    return S;
+  } finally {
+    _pullInFlight = false;
+  }
 }
 
 // Manual sync trigger
