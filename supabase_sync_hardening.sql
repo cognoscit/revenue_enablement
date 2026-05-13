@@ -1,6 +1,6 @@
 -- Revenue Enablement sync hardening for Supabase/PostgreSQL.
 -- Safe phase: additive columns, indexes, triggers, audit table, diagnostics.
--- Run in Supabase SQL editor before relying on browser writes that omit updated_at.
+-- Run in Supabase SQL editor to make timestamps/versioning server-owned.
 -- Backup recommendation:
 --   1. Export rg_sdm_deliverables and rg_sdm_config from Supabase.
 --   2. Run this script in a maintenance window.
@@ -39,6 +39,36 @@ alter table public.rg_sdm_config
   add column if not exists updated_at timestamptz not null default now(),
   add column if not exists version bigint not null default 1;
 
+-- If the columns already existed before this script, ADD COLUMN IF NOT EXISTS
+-- does not repair missing defaults/not-null flags. Normalize them explicitly.
+update public.rg_sdm_deliverables
+set
+  created_at = coalesce(created_at, now()),
+  updated_at = coalesce(updated_at, now()),
+  version = coalesce(version, 1);
+
+update public.rg_sdm_config
+set
+  created_at = coalesce(created_at, now()),
+  updated_at = coalesce(updated_at, now()),
+  version = coalesce(version, 1);
+
+alter table public.rg_sdm_deliverables
+  alter column created_at set default now(),
+  alter column created_at set not null,
+  alter column updated_at set default now(),
+  alter column updated_at set not null,
+  alter column version set default 1,
+  alter column version set not null;
+
+alter table public.rg_sdm_config
+  alter column created_at set default now(),
+  alter column created_at set not null,
+  alter column updated_at set default now(),
+  alter column updated_at set not null,
+  alter column version set default 1,
+  alter column version set not null;
+
 create unique index if not exists rg_sdm_deliverables_id_uidx
   on public.rg_sdm_deliverables (id);
 
@@ -60,12 +90,12 @@ create index if not exists rg_sdm_deliverables_deleted_idx
 
 drop trigger if exists trg_rg_sdm_deliverables_set_updated_at on public.rg_sdm_deliverables;
 create trigger trg_rg_sdm_deliverables_set_updated_at
-before update on public.rg_sdm_deliverables
+before insert or update on public.rg_sdm_deliverables
 for each row execute function public.rg_sdm_set_updated_at();
 
 drop trigger if exists trg_rg_sdm_config_set_updated_at on public.rg_sdm_config;
 create trigger trg_rg_sdm_config_set_updated_at
-before update on public.rg_sdm_config
+before insert or update on public.rg_sdm_config
 for each row execute function public.rg_sdm_set_updated_at();
 
 drop trigger if exists trg_rg_sdm_deliverables_bump_version on public.rg_sdm_deliverables;

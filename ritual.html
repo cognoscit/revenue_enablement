@@ -950,7 +950,9 @@ let _pullInFlight  = false;
 let _pushInFlight  = false;
 let _pushQueued    = false;
 let _lastPullChanged = false;
+let _lastPullHadError = false;
 let _syncSeq       = 0;
+const SYNC_FETCH_TIMEOUT_MS = 15000;
 
 function sbReady() { return !!(SB_URL && SB_KEY); }
 function sbBase()  { return SB_URL.replace(/\/+$/, "") + "/rest/v1/"; }
@@ -962,6 +964,30 @@ function sbHdr(extra) {
     "Cache-Control":   "no-cache, no-store",
     "Pragma":          "no-cache",
   }, extra||{});
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  var controller = new AbortController();
+  var timer = setTimeout(function(){ controller.abort(); }, timeoutMs || SYNC_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, Object.assign({}, options || {}, { signal: controller.signal }));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function responseTextSafe(response) {
+  try { return await response.clone().text(); }
+  catch(e) { return ""; }
+}
+
+function compactSyncError(text) {
+  return (text || "").replace(/\s+/g, " ").slice(0, 320);
+}
+
+function needsUpdatedAtCompatibility(status, text) {
+  var msg = text || "";
+  return status === 400 && /updated_at|null value|not-null|23502|default value|violates not-null/i.test(msg);
 }
 
 function syncTrace(event, detail) {
@@ -1111,7 +1137,7 @@ async function handleRealtimeDeliverable(payload) {
     // row.data can be null for large JSONB — fetch directly if needed
     if (!itemData) {
       try {
-        var r = await fetch(sbBase()+'rg_sdm_deliverables?id=eq.'+encodeURIComponent(itemId)+'&select=data', { headers: sbHdr() });
+        var r = await fetchWithTimeout(sbBase()+'rg_sdm_deliverables?id=eq.'+encodeURIComponent(itemId)+'&select=data', { headers: sbHdr() });
         if (r.ok) { var rows = await r.json(); itemData = rows[0] && rows[0].data; }
       } catch(e) {}
     }
@@ -1132,6 +1158,10 @@ async function handleRealtimeDeliverable(payload) {
 }
 
 async function handleRealtimeConfig(payload) {
+  if (_configDirty) {
+    syncTrace('realtime_config_deferred', { reason: 'local_config_dirty' });
+    return;
+  }
   // Called when rg_sdm_config changes — pull full config
   var cfg = payload && payload.new && payload.new.data;
   if (!cfg) {
@@ -1141,23 +1171,11 @@ async function handleRealtimeConfig(payload) {
     } catch(e) {}
   }
   if (!cfg) return;
-  if (!isAdminUser || !isAdminUser()) {
-    // Non-admin: always apply
-    applyRemoteConfig(cfg);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
-    renderSidebar(); render(); updateAvalBadge(); updateHolidayBadge();
-    syncTrace('realtime_config_apply', { role: 'non_admin' });
-    setOdStatus('synced', '● Live: ' + new Date().toLocaleTimeString('pt-BR'));
-  } else if (!_configDirty) {
-    // Admin only if not locally dirty
-    applyRemoteConfig(cfg);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
-    renderSidebar(); render(); updateAvalBadge(); updateHolidayBadge();
-    syncTrace('realtime_config_apply', { role: 'admin_clean' });
-    setOdStatus('synced', '● Live: ' + new Date().toLocaleTimeString('pt-BR'));
-  } else {
-    syncTrace('realtime_config_deferred', { reason: 'local_config_dirty' });
-  }
+  applyRemoteConfig(cfg);
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
+  renderSidebar(); render(); updateAvalBadge(); updateHolidayBadge();
+  syncTrace('realtime_config_apply', { role: (isAdminUser && isAdminUser()) ? 'admin_clean' : 'non_admin_clean' });
+  setOdStatus('synced', '● Live: ' + new Date().toLocaleTimeString('pt-BR'));
 }
 
 function startBgSync() {
@@ -1281,24 +1299,42 @@ function extractConfig() {
 async function upsertDeliverable(itemId, dateKey, item) {
   try {
     item.updatedAt = new Date().toISOString();
-    var r = await fetch(sbBase() + "rg_sdm_deliverables", {
+    var body = {
+      id:         itemId,
+      date_key:   dateKey,
+      member_id:  item.memberId || null,
+      data:       item
+    };
+    var r = await fetchWithTimeout(sbBase() + "rg_sdm_deliverables", {
       method:  "POST",
       headers: sbHdr({ "Prefer": "resolution=merge-duplicates,return=representation" }),
-      body:    JSON.stringify({
-        id:         itemId,
-        date_key:   dateKey,
-        member_id:  item.memberId || null,
-        data:       item
-      })
+      body:    JSON.stringify(body)
     });
     if (!(r.ok || r.status === 201)) {
-      syncTrace('upsert_deliverable_failed', { itemId: itemId, status: r.status });
+      var text = await responseTextSafe(r);
+      if (needsUpdatedAtCompatibility(r.status, text)) {
+        syncTrace('upsert_deliverable_compat_retry', { itemId: itemId, status: r.status, error: compactSyncError(text) });
+        var compatBody = Object.assign({}, body, { updated_at: new Date().toISOString() });
+        r = await fetchWithTimeout(sbBase() + "rg_sdm_deliverables", {
+          method:  "POST",
+          headers: sbHdr({ "Prefer": "resolution=merge-duplicates,return=representation" }),
+          body:    JSON.stringify(compatBody)
+        });
+        if (r.ok || r.status === 201) {
+          syncTrace('upsert_deliverable_ok', { itemId: itemId, dateKey: dateKey, compatibility: 'updated_at' });
+          return true;
+        }
+        text = await responseTextSafe(r);
+      }
+      syncTrace('upsert_deliverable_failed', { itemId: itemId, status: r.status, error: compactSyncError(text) });
+      setOdStatus("error", "Falha ao salvar item: " + compactSyncError(text));
       return false;
     }
     syncTrace('upsert_deliverable_ok', { itemId: itemId, dateKey: dateKey });
     return true;
   } catch(e) {
     syncTrace('upsert_deliverable_error', { itemId: itemId, message: e.message });
+    setOdStatus("error", "Falha ao salvar item: " + e.message);
     return false;
   }
 }
@@ -1306,15 +1342,16 @@ async function upsertDeliverable(itemId, dateKey, item) {
 // Delete a deliverable row (when item is physically removed)
 async function deleteDeliverable(itemId) {
   try {
-    var r = await fetch(sbBase() + "rg_sdm_deliverables?id=eq." + encodeURIComponent(itemId), {
+    var r = await fetchWithTimeout(sbBase() + "rg_sdm_deliverables?id=eq." + encodeURIComponent(itemId), {
       method:  "DELETE",
       headers: sbHdr()
     });
-    if (!r.ok) syncTrace('delete_deliverable_failed', { itemId: itemId, status: r.status });
+    if (!r.ok) syncTrace('delete_deliverable_failed', { itemId: itemId, status: r.status, error: compactSyncError(await responseTextSafe(r)) });
     else syncTrace('delete_deliverable_ok', { itemId: itemId });
     return r.ok;
   } catch(e) {
     syncTrace('delete_deliverable_error', { itemId: itemId, message: e.message });
+    setOdStatus("error", "Falha ao excluir item: " + e.message);
     return false;
   }
 }
@@ -1322,19 +1359,37 @@ async function deleteDeliverable(itemId) {
 // Upsert config
 async function pushConfig() {
   try {
-    var r = await fetch(sbBase() + "rg_sdm_config", {
+    var body = { id: "config", data: extractConfig() };
+    var r = await fetchWithTimeout(sbBase() + "rg_sdm_config", {
       method:  "POST",
       headers: sbHdr({ "Prefer": "resolution=merge-duplicates,return=representation" }),
-      body:    JSON.stringify({ id: "config", data: extractConfig() })
+      body:    JSON.stringify(body)
     });
     if (!(r.ok || r.status === 201)) {
-      syncTrace('push_config_failed', { status: r.status });
+      var text = await responseTextSafe(r);
+      if (needsUpdatedAtCompatibility(r.status, text)) {
+        syncTrace('push_config_compat_retry', { status: r.status, error: compactSyncError(text) });
+        var compatBody = Object.assign({}, body, { updated_at: new Date().toISOString() });
+        r = await fetchWithTimeout(sbBase() + "rg_sdm_config", {
+          method:  "POST",
+          headers: sbHdr({ "Prefer": "resolution=merge-duplicates,return=representation" }),
+          body:    JSON.stringify(compatBody)
+        });
+        if (r.ok || r.status === 201) {
+          syncTrace('push_config_ok', { compatibility: 'updated_at' });
+          return true;
+        }
+        text = await responseTextSafe(r);
+      }
+      syncTrace('push_config_failed', { status: r.status, error: compactSyncError(text) });
+      setOdStatus("error", "Falha ao salvar configurações: " + compactSyncError(text));
       return false;
     }
     syncTrace('push_config_ok');
     return true;
   } catch(e) {
     syncTrace('push_config_error', { message: e.message });
+    setOdStatus("error", "Falha ao salvar configurações: " + e.message);
     return false;
   }
 }
@@ -1405,14 +1460,14 @@ async function pullAllDeliverables() {
     var page    = 0;
     var pageSize = 1000;
     while (true) {
-      var r = await fetch(
+      var r = await fetchWithTimeout(
         sbBase() + "rg_sdm_deliverables?select=id,date_key,data,updated_at"
           + "&order=date_key.desc"
           + "&limit=" + pageSize
           + "&offset=" + (page * pageSize),
         { headers: sbHdr() }
       );
-      if (!r.ok) { syncTrace('pull_deliverables_failed', { status: r.status, page: page }); return null; }
+      if (!r.ok) { _lastPullHadError = true; syncTrace('pull_deliverables_failed', { status: r.status, page: page, error: compactSyncError(await responseTextSafe(r)) }); return null; }
       var batch = await r.json();
       if (!batch || !batch.length) break;
       allRows = allRows.concat(batch);
@@ -1422,6 +1477,7 @@ async function pullAllDeliverables() {
     }
     return allRows;
   } catch(e) {
+    _lastPullHadError = true;
     syncTrace('pull_deliverables_error', { message: e.message });
     return null;
   }
@@ -1429,11 +1485,16 @@ async function pullAllDeliverables() {
 
 async function pullConfig() {
   try {
-    var r = await fetch(sbBase() + "rg_sdm_config?id=eq.config&select=data,updated_at", { headers: sbHdr() });
-    if (!r.ok) return null;
+    var r = await fetchWithTimeout(sbBase() + "rg_sdm_config?id=eq.config&select=data,updated_at", { headers: sbHdr() });
+    if (!r.ok) {
+      _lastPullHadError = true;
+      syncTrace('pull_config_failed', { status: r.status, error: compactSyncError(await responseTextSafe(r)) });
+      return null;
+    }
     var rows = await r.json();
     return rows && rows.length ? rows[0] : null;
   } catch(e) {
+    _lastPullHadError = true;
     syncTrace('pull_config_error', { message: e.message });
     return null;
   }
@@ -1464,6 +1525,7 @@ async function pullFromOneDrive() {
   if (_pullInFlight) return S;
   _pullInFlight = true;
   _lastPullChanged = false;
+  _lastPullHadError = false;
   try {
     var beforeSig = syncStateSignature();
     var beforeCfgSig = syncConfigSignature();
@@ -1474,10 +1536,9 @@ async function pullFromOneDrive() {
   // Apply config (only if not locally dirty)
   if (cfgRow && cfgRow.data) {
     var cfg = cfgRow.data;
-    // Non-admin: always apply remote config (they don't edit config locally)
-    // Admin: apply if remote is newer OR if not locally dirty
-    var adminUser = isAdminUser && isAdminUser();
-    var applyConfig = !adminUser || !_configDirty;
+    // Any local config change (recorrentes, templates, avaliações, settings)
+    // must survive until its push is confirmed.
+    var applyConfig = !_configDirty;
     if (applyConfig) {
       applyRemoteConfig(cfg);
     } else {
@@ -1553,6 +1614,9 @@ async function odLogin() {
     applyTheme(); renderSidebar(); render();
     setOdStatus("synced", "Sincronizado: " + new Date().toLocaleTimeString("pt-BR"));
     toast("✅ Sincronizado com Supabase!", "green");
+  } else if (_lastPullHadError) {
+    setOdStatus("offline", "Falha ao ler Supabase; envio inicial bloqueado");
+    toast("⚠️ Não foi possível ler o Supabase. Nada foi sobrescrito.", "yellow");
   } else {
     await firstTimePush();
   }
@@ -1562,20 +1626,34 @@ async function odLogin() {
 async function firstTimePush() {
   if (!sbReady()) return;
   setOdStatus("syncing");
-  await pushConfig();
+  var allOk = true;
+  var okCfg = await pushConfig();
+  if (!okCfg) { _configDirty = true; allOk = false; }
   var allDates = Object.keys(S.days||{});
   for (var i = 0; i < allDates.length; i++) {
     var dk = allDates[i];
     var dels = (S.days[dk].deliverables||[]);
     for (var j = 0; j < dels.length; j++) {
-      await upsertDeliverable(dels[j].id, dk, dels[j]);
+      var okItem = await upsertDeliverable(dels[j].id, dk, dels[j]);
+      if (!okItem) {
+        _dirtyItems.set(dels[j].id, { dateKey: dk, item: dels[j] });
+        allOk = false;
+      }
     }
   }
-  _configDirty = false;
-  _dirtyItems.clear();
-  persistDirtyQueue();
-  setOdStatus("synced");
-  toast("✅ Dados enviados ao Supabase", "green");
+  if (allOk) {
+    _configDirty = false;
+    _dirtyItems.clear();
+    persistDirtyQueue();
+    setOdStatus("synced");
+    toast("✅ Dados enviados ao Supabase", "green");
+  } else {
+    persistDirtyQueue();
+    setOdStatus("offline", "Falha no envio inicial; retry em 30s");
+    scheduleRetry();
+    toast("⚠️ Supabase não confirmou todos os dados. A fila local foi preservada.", "yellow");
+  }
+  return allOk;
 }
 
 function odLogout() { setOdStatus("disconnected"); }
@@ -1589,8 +1667,9 @@ async function forceSyncNow() {
     renderSidebar(); render();
   }
   if (_dirtyItems.size > 0 || _configDirty) await pushToOneDrive();
+  else if (_lastPullHadError) setOdStatus("offline", "Falha ao ler Supabase");
   else setOdStatus("synced", "Atualizado: " + new Date().toLocaleTimeString("pt-BR"));
-  toast("✅ Sincronização concluída", "green");
+  toast(_lastPullHadError ? "⚠️ Sync incompleto: falha ao ler Supabase" : "✅ Sincronização concluída", _lastPullHadError ? "yellow" : "green");
 }
 
 async function forceDownloadNow() {
@@ -1722,8 +1801,12 @@ async function load() {
       checkIdentityOnLoad();
       startBgSync();
     } else {
-      await firstTimePush();
-      setOdStatus("synced");
+      if (_lastPullHadError) {
+        setOdStatus("offline", "Falha ao ler Supabase; envio inicial bloqueado");
+        scheduleRetry();
+      } else {
+        await firstTimePush();
+      }
       startBgSync();
     }
   }, 400);  // fast initial pull for team collaboration
@@ -1739,6 +1822,7 @@ async function load() {
 function migrateRecurring() {
   if (!S.recurring) S.recurring = [];
   let changed = false;
+  let changedItems = 0;
   const srcMap = {};   // chave → source id já existente em S.recurring
 
   // Indexa fontes já criadas para evitar duplicatas
@@ -1777,13 +1861,21 @@ function migrateRecurring() {
 
       // Vincula ocorrência existente à fonte
       item.recurringSourceId = srcMap[k];
+      if (item.id) {
+        _dirtyItems.set(item.id, { dateKey: dateStr, item: item });
+        changedItems++;
+      }
       changed = true;
     });
   });
 
   if (changed) {
+    _configDirty = true;
+    persistDirtyQueue();
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(S)); } catch(e) {}
+    syncTrace('recurring_migration_dirty', { sources: S.recurring.length, items: changedItems });
     console.log('[RG] Migração: ' + S.recurring.length + ' fonte(s) recorrente(s) ativas.');
+    if (sbReady()) pushToOneDrive();
   }
 }
 
