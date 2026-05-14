@@ -4060,7 +4060,12 @@ function renderSettings() {
 
 function addCat(){const i=document.getElementById('new-cat');const v=i.value.trim();if(v&&!S.settings.categories.includes(v)){S.settings.categories.push(v);_configDirty=true; save();renderSettings();}i.value='';}
 function removeCat(c){S.settings.categories=S.settings.categories.filter(x=>x!==c);_configDirty=true; save();renderSettings();}
-function confirmReset(){openModal({title:'⚠️ Resetar Dados',body:`<div style="text-align:center;padding:20px"><div style="font-size:44px;margin-bottom:12px">⚠️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px">Apagar todos os dados?</div><div style="color:var(--text-muted)">Esta ação não pode ser desfeita.</div></div>`,foot:`<button class="btn btn-s" onclick="closeModal()">Cancelar</button><button class="btn btn-d" onclick="S=defaultState();_configDirty=true; save();closeModal();render();toast('✅ Dados resetados','yellow')">Confirmar Reset</button>`});}
+function confirmReset(){openModal({title:'⚠️ Resetar Dados',body:`<div style="text-align:center;padding:20px"><div style="font-size:44px;margin-bottom:12px">⚠️</div><div style="font-size:15px;font-weight:600;margin-bottom:6px">Apagar todos os dados?</div><div style="color:var(--text-muted);margin-bottom:14px">Esta ação não pode ser desfeita e será sincronizada com o Supabase.</div><div class="fg" style="text-align:left;margin:0 auto;max-width:320px"><label class="flbl">Digite RESETAR para confirmar</label><input class="fi" id="reset-confirm-text" autocomplete="off" placeholder="RESETAR"></div></div>`,foot:`<button class="btn btn-s" onclick="closeModal()">Cancelar</button><button class="btn btn-d" onclick="executeReset()">Confirmar Reset</button>`});}
+function executeReset(){
+  var txt = (document.getElementById('reset-confirm-text')?.value || '').trim();
+  if (txt !== 'RESETAR') { toast('Digite RESETAR para confirmar o reset.', 'yellow'); return; }
+  S=defaultState();_configDirty=true; save();closeModal();render();toast('✅ Dados resetados','yellow');
+}
 
 // ═══════════════════════════════════════════════════
 // MODALS
@@ -5129,7 +5134,10 @@ async function exportState(){
 function importFile(input){
   const file=input.files[0];if(!file)return;
   const r=new FileReader();
-  r.onload=e=>{try{const imp=JSON.parse(e.target.result);if(!imp.team||!imp.days)throw new Error('Formato inválido');S=imp;if(!S.pillars)S.pillars=defaultState().pillars;if(!S.templates)S.templates=[];_configDirty=true; Object.keys(imp.days||{}).forEach(function(dk){(imp.days[dk].deliverables||[]).forEach(function(item){_dirtyItems.set(item.id,{dateKey:dk,item:item});});});
+  r.onload=e=>{try{const imp=JSON.parse(e.target.result);if(!imp.team||!imp.days)throw new Error('Formato inválido');
+  var ok=confirm('Importar este JSON substituirá a configuração local atual e enviará os dados importados para o Supabase. Continuar?');
+  if(!ok){toast('Importação cancelada','yellow');return;}
+  S=imp;if(!S.pillars)S.pillars=defaultState().pillars;if(!S.templates)S.templates=[];_configDirty=true; Object.keys(imp.days||{}).forEach(function(dk){(imp.days[dk].deliverables||[]).forEach(function(item){_dirtyItems.set(item.id,{dateKey:dk,item:item});});});
   save();applyTheme();renderSidebar();render();toast('✅ JSON importado com sucesso','green');}catch(err){toast('❌ Erro: '+err.message,'red');}};
   r.readAsText(file);input.value='';
 }
@@ -6197,7 +6205,7 @@ function openAvalModal(memberId, weekK) {
   var sbk='sb_'+weekK.replace(/[^a-z0-9]/gi,'_')+'_'+(memberId||'').replace(/[^a-z0-9]/gi,'_');
   if(!window._avalSubmitCache) window._avalSubmitCache={};
   window._avalSubmitCache[sbk]={memberId,weekK};
-  var foot='<button class="btn btn-s" onclick="closeModal()">Cancelar</button>'
+  var foot='<button class="btn btn-s" onclick="cancelAvalBatch()">Cancelar</button>'
     +'<button class="btn btn-p" onclick="_submitAvalModal(\'' + sbk + '\')">✓ Salvar</button>';
 
   openModal({ title: m.name + ' · Autoavaliação', body, foot, size:'md' });
@@ -6227,6 +6235,7 @@ function submitAvalModal(memberId, weekK) {
   toast('✅ Autoavaliação salva — ' + getMember(memberId).name.split(' ')[0], 'green');
   closeModal();
   if (view === 'avaliacoes') renderAvaliacoes();
+  if (_avalBatchWeek === weekK) setTimeout(function(){ openNextPending(weekK); }, 120);
 }
 
 // Toggle último dia útil mode
@@ -6299,6 +6308,7 @@ function deleteWeekAval(weekK) {
 // ═══════════════════════════════════════════════════
 
 var _expandedWeeks = {};
+var _avalBatchWeek = null;
 
 function avalScoreColor(s) {
   if (!s) return 'var(--text-muted)';
@@ -6379,6 +6389,23 @@ function buildAvalWeekSection(weekK, openWk, todayWk) {
     }
   });
   return hdrHtml + '<div id="week-section-' + weekK.replace(/[^a-z0-9]/gi, '') + '">' + membersHtml + '</div>';
+}
+
+function openNextPending(weekK) {
+  var wkAssess = (S.assessments || {})[weekK] || {};
+  var next = (S.team || []).filter(function(m){ return m.active; }).find(function(m){ return !wkAssess[m.id]; });
+  _avalBatchWeek = weekK;
+  if (!next) {
+    _avalBatchWeek = null;
+    toast('Todas as autoavaliações desta semana já foram preenchidas.', 'green');
+    return;
+  }
+  openAvalModal(next.id, weekK);
+}
+
+function cancelAvalBatch() {
+  _avalBatchWeek = null;
+  closeModal();
 }
 
 function buildWeekBlockForMember(weekK) {
